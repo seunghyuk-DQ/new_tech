@@ -4,11 +4,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const outputDirectory = resolve(process.argv[2] || "output/bookmark-site");
-const [documentHtml, styles, application, manifestSource] = await Promise.all([
+const [documentHtml, styles, application, manifestSource, favicon] = await Promise.all([
   readFile("new_tech.html", "utf8"),
   readFile("assets/styles.css", "utf8"),
   readFile("assets/app.js", "utf8"),
   readFile("content/manifest.json", "utf8"),
+  readFile("assets/favicon.svg", "utf8"),
 ]);
 
 const manifest = JSON.parse(manifestSource);
@@ -20,9 +21,10 @@ const embeddedContent = JSON.stringify({
   manifest,
   pages: Object.fromEntries(pageEntries),
 }).replaceAll("<", "\\u003c");
+const embeddedFavicon = `data:image/svg+xml,${encodeURIComponent(favicon)}`;
 
 const bundledHtml = documentHtml
-  .replace(/\s*<link rel="icon"[^>]*>\s*/u, "\n")
+  .replace(/<link rel="icon"[^>]*>/u, `<link rel="icon" href="${embeddedFavicon}" type="image/svg+xml">`)
   .replace(/\s*<link rel="preconnect"[^>]*>\s*/gu, "\n")
   .replace(/\s*<link href="https:\/\/fonts\.googleapis\.com[^>]*>\s*/u, "\n")
   .replace(

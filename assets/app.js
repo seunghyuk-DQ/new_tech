@@ -3,13 +3,20 @@
   const nav = document.getElementById("daily-nav");
   const crumbs = document.getElementById("crumbs");
   const readTime = document.getElementById("read-time");
+  const sidebar = document.getElementById("sidebar");
   const menuButton = document.getElementById("menu-button");
   const sidebarClose = document.getElementById("sidebar-close");
   const scrim = document.getElementById("sidebar-scrim");
   const modeButton = document.getElementById("mode-button");
   const embeddedContent = window.__NEW_TECH_CONTENT__;
+  const mobileNavQuery = window.matchMedia("(max-width: 760px)");
+  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   let manifest;
   let pages = [];
+  let hasRenderedPage = false;
+  let drawerFrame = 0;
+  let drawerDrag = null;
+  let suppressNextSidebarClick = false;
 
   function readStoredTheme() {
     try {
@@ -29,6 +36,7 @@
 
   function setTheme(theme) {
     document.documentElement.dataset.theme = theme;
+    document.querySelector("meta[name='theme-color']").content = theme === "dark" ? "#141414" : "#ffffff";
     storeTheme(theme);
     modeButton.textContent = theme === "dark" ? "☼" : "◐";
     modeButton.setAttribute("aria-label", theme === "dark" ? "밝은 모드로 전환" : "어두운 모드로 전환");
@@ -39,14 +47,194 @@
   setTheme(savedTheme || preferredTheme);
   modeButton.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
-  function toggleNav(open) {
+  function sidebarWidth() {
+    return sidebar.getBoundingClientRect().width || 286;
+  }
+
+  function drawerPosition() {
+    const transform = getComputedStyle(sidebar).transform;
+    if (!transform || transform === "none") return document.body.classList.contains("nav-open") ? 0 : -sidebarWidth();
+    try {
+      return new DOMMatrixReadOnly(transform).m41;
+    } catch {
+      const match = transform.match(/^matrix\([^,]+,[^,]+,[^,]+,[^,]+,\s*([^,]+)/);
+      return match ? Number(match[1]) : -sidebarWidth();
+    }
+  }
+
+  function drawDrawer(x) {
+    const width = sidebarWidth();
+    const clamped = Math.max(-width, Math.min(0, x));
+    const progress = 1 + clamped / width;
+    sidebar.style.transform = `translate3d(${clamped}px, 0, 0)`;
+    scrim.style.opacity = String(Math.max(0, Math.min(1, progress)));
+  }
+
+  function stopDrawerAnimation() {
+    if (drawerFrame) cancelAnimationFrame(drawerFrame);
+    drawerFrame = 0;
+  }
+
+  function settleDrawer(open) {
+    stopDrawerAnimation();
+    drawDrawer(open ? 0 : -sidebarWidth());
     document.body.classList.toggle("nav-open", open);
     menuButton.setAttribute("aria-expanded", String(open));
     scrim.hidden = !open;
+    if (mobileNavQuery.matches) {
+      sidebar.inert = !open;
+      sidebar.setAttribute("aria-hidden", String(!open));
+    }
+  }
+
+  function animateDrawer(open, releaseVelocity = 0) {
+    if (!mobileNavQuery.matches || reducedMotionQuery.matches) {
+      settleDrawer(open);
+      return;
+    }
+
+    const width = sidebarWidth();
+    const target = open ? 0 : -width;
+    let position = drawerPosition();
+    let velocity = releaseVelocity;
+
+    if (Math.abs(position - target) < .5 && Math.abs(velocity) < 4) {
+      settleDrawer(open);
+      return;
+    }
+
+    stopDrawerAnimation();
+    if (open) {
+      sidebar.inert = false;
+      sidebar.setAttribute("aria-hidden", "false");
+    }
+    document.body.classList.add("nav-open");
+    menuButton.setAttribute("aria-expanded", String(open));
+    scrim.hidden = false;
+
+    const stiffness = 460;
+    const damping = 2 * Math.sqrt(stiffness);
+    let previousTime = performance.now();
+
+    const step = now => {
+      const dt = Math.min((now - previousTime) / 1000, .032);
+      previousTime = now;
+      const acceleration = -stiffness * (position - target) - damping * velocity;
+      velocity += acceleration * dt;
+      position += velocity * dt;
+      drawDrawer(position);
+
+      if (Math.abs(position - target) < 1.25 && Math.abs(velocity) < 20) {
+        settleDrawer(open);
+      } else {
+        drawerFrame = requestAnimationFrame(step);
+      }
+    };
+    drawerFrame = requestAnimationFrame(step);
+  }
+
+  function toggleNav(open) {
+    if (!mobileNavQuery.matches) {
+      stopDrawerAnimation();
+      sidebar.style.transform = "";
+      scrim.style.opacity = "";
+      document.body.classList.toggle("nav-open", open);
+      menuButton.setAttribute("aria-expanded", String(open));
+      scrim.hidden = !open;
+      return;
+    }
+    animateDrawer(open);
   }
   menuButton.addEventListener("click", () => toggleNav(true));
   sidebarClose.addEventListener("click", () => toggleNav(false));
   scrim.addEventListener("click", () => toggleNav(false));
+
+  sidebar.addEventListener("pointerdown", event => {
+    if (!mobileNavQuery.matches || scrim.hidden || event.button !== 0) return;
+    stopDrawerAnimation();
+    const position = drawerPosition();
+    drawerDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startPosition: position,
+      dragging: false,
+      samples: [{ time: event.timeStamp, position }]
+    };
+  });
+
+  sidebar.addEventListener("pointermove", event => {
+    if (!drawerDrag || drawerDrag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drawerDrag.startX;
+    const dy = event.clientY - drawerDrag.startY;
+
+    if (!drawerDrag.dragging) {
+      if (Math.hypot(dx, dy) < 10) return;
+      if (Math.abs(dy) >= Math.abs(dx)) {
+        drawerDrag = null;
+        return;
+      }
+      drawerDrag.dragging = true;
+      sidebar.setPointerCapture(event.pointerId);
+    }
+
+    event.preventDefault();
+    const position = drawerDrag.startPosition + dx;
+    drawDrawer(position);
+    drawerDrag.samples.push({ time: event.timeStamp, position: drawerPosition() });
+    drawerDrag.samples = drawerDrag.samples.filter(sample => event.timeStamp - sample.time <= 120);
+  });
+
+  function finishDrawerDrag(event) {
+    if (!drawerDrag || drawerDrag.pointerId !== event.pointerId) return;
+    const drag = drawerDrag;
+    drawerDrag = null;
+    if (!drag.dragging) return;
+
+    const position = drawerPosition();
+    const first = drag.samples[0];
+    const last = drag.samples.at(-1);
+    const elapsed = Math.max(1, last.time - first.time);
+    const velocity = (last.position - first.position) / elapsed * 1000;
+    const projectedPosition = position + velocity * .22;
+    const shouldOpen = projectedPosition > -sidebarWidth() * .5;
+    suppressNextSidebarClick = true;
+    animateDrawer(shouldOpen, velocity);
+  }
+
+  sidebar.addEventListener("pointerup", finishDrawerDrag);
+  sidebar.addEventListener("pointercancel", finishDrawerDrag);
+  sidebar.addEventListener("click", event => {
+    if (!suppressNextSidebarClick) return;
+    suppressNextSidebarClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+
+  function syncDrawerToViewport() {
+    stopDrawerAnimation();
+    const open = document.body.classList.contains("nav-open");
+    if (mobileNavQuery.matches) {
+      settleDrawer(open);
+    } else {
+      sidebar.style.transform = "";
+      scrim.style.opacity = "";
+      document.body.classList.remove("nav-open");
+      sidebar.inert = false;
+      sidebar.removeAttribute("aria-hidden");
+      menuButton.setAttribute("aria-expanded", "false");
+      scrim.hidden = true;
+    }
+  }
+
+  mobileNavQuery.addEventListener?.("change", syncDrawerToViewport);
+  window.addEventListener("resize", syncDrawerToViewport, { passive: true });
+  window.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || !document.body.classList.contains("nav-open")) return;
+    toggleNav(false);
+    menuButton.focus();
+  });
+  syncDrawerToViewport();
 
   function flattenPages(data) {
     return data.days.flatMap(day => day.pages.map(page => ({ ...page, date: day.date, dateLabel: day.label, dayTitle: day.title })));
@@ -202,10 +390,25 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         html = await response.text();
       }
-      root.innerHTML = `${html}${articleNavigation(page)}`;
-      crumbs.textContent = `${page.date.replaceAll("-", ".")} / ${page.index} ${page.title}`;
-      document.title = `${page.title} · NEW_TECH`;
-      initArticle(page);
+
+      const renderPage = () => {
+        root.innerHTML = `${html}${articleNavigation(page)}`;
+        crumbs.textContent = `${page.date.replaceAll("-", ".")} / ${page.index} ${page.title}`;
+        document.title = `${page.title} · NEW_TECH`;
+        initArticle(page);
+      };
+
+      if (hasRenderedPage && document.startViewTransition && !reducedMotionQuery.matches) {
+        try {
+          const transition = document.startViewTransition(renderPage);
+          await transition.updateCallbackDone;
+        } catch {
+          renderPage();
+        }
+      } else {
+        renderPage();
+      }
+      hasRenderedPage = true;
       if (!preserveScroll) window.scrollTo({ top: 0, behavior: "instant" });
       root.focus({ preventScroll: true });
       toggleNav(false);
