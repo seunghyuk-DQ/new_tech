@@ -1,0 +1,47 @@
+name: Deploy bookmark HTML site
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: new-tech-bookmark-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BOOKMARK_BASE_URL: ${{ vars.BOOKMARK_BASE_URL }}
+      BOOKMARK_SITE_ID: ${{ vars.BOOKMARK_SITE_ID }}
+      BOOKMARK_ENTRY_PATH: ${{ vars.BOOKMARK_ENTRY_PATH }}
+      BOOKMARK_INSECURE_TLS: "1"
+      BOOKMARK_AUTH_TOKEN: ${{ secrets.BOOKMARK_AUTH_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          test -n "$BOOKMARK_BASE_URL"
+          test -n "$BOOKMARK_SITE_ID"
+          test -n "$BOOKMARK_ENTRY_PATH"
+
+      - name: Upload HTML site revision
+        id: deploy
+        shell: bash
+        run: bash scripts/deploy-bookmark-site.sh update
+
+      - name: Report deployment
+        shell: bash
+        run: |
+          echo "Deployed bookmark site ${{ steps.deploy.outputs.site_id }} revision ${{ steps.deploy.outputs.revision }}"
+          echo "${{ steps.deploy.outputs.url }}"
