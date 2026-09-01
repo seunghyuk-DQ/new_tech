@@ -1,0 +1,180 @@
+<article class="article">
+  <header class="article-header" data-index="05">
+    <div class="eyebrow">SSD EXPERT OFFLOADING / STORAGE-AWARE MoE</div>
+    <h1>SSD는 expert 창고가 될 수 있다</h1>
+    <p class="dek">다만 매 token마다 창고까지 다녀오면 느리다. 실용적인 설계는 NVMe를 cold bank로 두고 RAM staging과 VRAM cache를 앞에 세운다. 성능은 결국 <strong>token당 읽는 expert byte와 cache miss율</strong>이 결정한다.</p>
+    <div class="header-meta">
+      <span class="meta-chip">SSD → RAM → VRAM</span>
+      <span class="meta-chip">ROUTER-DEPENDENT I/O</span>
+      <span class="meta-chip">UPSTREAM SUPPORT: EXPERIMENTAL</span>
+    </div>
+  </header>
+
+  <section class="section" aria-labelledby="ssd-summary">
+    <div class="summary-grid" id="ssd-summary">
+      <div class="summary-card accent">
+        <span class="label">가능한 이유</span>
+        <span class="metric">Sparse read</span>
+        <p>MoE는 token마다 일부 expert만 고른다. 파일에서 그 expert slice만 읽으면 전체 checkpoint를 RAM에 둘 필요가 없다.</p>
+      </div>
+      <div class="summary-card">
+        <span class="label">FlashMoE profile</span>
+        <span class="metric">3 ms</span>
+        <p>SSD-cache FlashMoE 논문 환경의 expert load 약 3ms. FFN 158µs보다 길어서 cache와 overlap이 필요했다. 동명의 distributed-kernel 논문과는 다르다.</p>
+      </div>
+      <div class="summary-card">
+        <span class="label">llama.cpp 상태</span>
+        <span class="metric">PoC / RFC</span>
+        <p>직접 SSD expert streaming은 공개 실험이 있지만, 2026-09-01 기준 일반 사용자를 위한 upstream 안정 기능은 아니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="ssd-identity">
+    <div class="section-head">
+      <div class="section-number">01 / IDENTITY</div>
+      <div>
+        <h2 id="ssd-identity">mmap paging과 expert streaming은 다르다</h2>
+        <p class="section-intro">모델이 RAM보다 크다고 해서 runtime이 expert를 영리하게 관리하는 것은 아니다. 누가 어떤 byte range를 언제 읽는지에 따라 같은 NVMe도 결과가 달라진다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="boundary-grid">
+        <div class="boundary-cell risky"><span class="boundary-icon">OS MMAP</span><strong>우연한 disk paging</strong><p>OS가 page fault를 보고 model file page를 읽는다. router와 expert 경계를 모르므로 작은 random read와 eviction thrash가 생길 수 있다.</p></div>
+        <div class="boundary-cell"><span class="boundary-icon">EXPLICIT READ</span><strong>expert-aware streaming</strong><p>router가 고른 expert의 연속 slice를 <code>pread</code>하고 다음 계산과 겹친다. 읽기 크기와 순서를 runtime이 통제한다.</p></div>
+        <div class="boundary-cell"><span class="boundary-icon">TIERED CACHE</span><strong>SSD → RAM → VRAM</strong><p>shared weight는 RAM, hot expert는 VRAM, cold expert는 SSD에 둔다. miss일 때만 느린 tier를 내려간다.</p></div>
+      </div>
+      <div class="takeaway"><div class="takeaway-mark">↳</div><p><strong>SSD offloading의 핵심은 SSD가 아니다.</strong> 활성 expert만 골라 큰 덩어리로 읽고, 다음 layer 계산과 겹치며, 반복되는 expert를 위 tier에 남기는 scheduler가 성능을 만든다.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="ssd-flow">
+    <div class="section-head">
+      <div class="section-number">02 / DATA PATH</div>
+      <div>
+        <h2 id="ssd-flow">router가 storage working set을 만든다</h2>
+        <p class="section-intro">일반 offload는 native router가 선택을 끝낸 뒤 I/O를 시작한다. SpecPrefetch 같은 방식은 다음 layer 후보를 먼저 예측해 transfer만 당긴다. 최종 expert 선택은 원래 router가 유지한다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="visual-stage">
+        <div class="visual-title"><strong>한 MoE layer의 cold-miss 경로</strong><span>PREDICT / ROUTE → ASYNC READ → CACHE / EXECUTE</span></div>
+        <div class="flow-diagram" role="img" aria-label="router 또는 prefetch predictor가 expert를 고르고 SSD에서 RAM으로 읽은 뒤 VRAM cache나 CPU에서 실행하는 경로">
+          <div class="flow-node draft">
+            <small>01 · working set</small>
+            <div><strong>활성 expert ID</strong><div class="token-row"><span class="token">E7</span><span class="token">E31</span><span class="token">E84</span></div></div>
+            <p>native router가 실행 대상을 확정. predictor는 transfer 후보만 미리 제안</p>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-node verify">
+            <small>02 · NVMe cold bank</small>
+            <div><strong>expert slice async read</strong><div class="token-row"><span class="token">pread</span><span class="token">batch</span><span class="token">overlap</span></div></div>
+            <p>작은 page fault 대신 연속 범위를 모아 RAM staging buffer로 읽음</p>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-node commit">
+            <small>03 · fast tiers</small>
+            <div><strong>RAM staging · VRAM slots</strong><div class="token-row"><span class="token ok">hit</span><span class="token">H2D</span><span class="token">CPU</span></div></div>
+            <p>hot expert는 남기고 miss만 교체. output은 native gate weight로 결합</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="method-grid">
+        <article class="method-card" data-family="sequential">
+          <div class="method-top"><div><span class="method-kind">AFTER ROUTING</span><h3 class="method-name">Reactive load</h3></div><span class="method-badge">EXACT</span></div>
+          <div class="method-line"><span>정확도</span><span>실제 선택 expert만 읽으므로 불필요한 prefetch가 없다.</span></div>
+          <div class="method-line"><span>지연</span><span>route → load → compute가 직렬화된다. cold miss가 decode critical path에 노출된다.</span></div>
+        </article>
+        <article class="method-card" data-family="parallel">
+          <div class="method-top"><div><span class="method-kind">BEFORE ROUTING</span><h3 class="method-name">Predictive prefetch</h3></div><span class="method-badge">SPECULATIVE I/O</span></div>
+          <div class="method-line"><span>정확도</span><span>예측이 틀려도 native router output은 바뀌지 않는다. 전송 byte와 hit율만 손해 본다.</span></div>
+          <div class="method-line"><span>이득</span><span>SpecPrefetch는 Snapdragon 8 Elite에서 offload runtime 대비 decode throughput을 최대 20% 높였다.</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="ssd-budget">
+    <div class="section-head">
+      <div class="section-number">03 / I/O BUDGET</div>
+      <div>
+        <h2 id="ssd-budget">먼저 GB/token을 계산한다</h2>
+        <p class="section-intro">SSD catalog의 최고 순차 속도만 보면 안 된다. 실제 필요한 값은 active expert traffic에서 cache hit을 뺀 뒤 목표 tok/s를 곱한 지속 read bandwidth다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="visual-stage" data-ssd-calculator>
+        <div class="visual-title"><strong>SSD expert traffic budget</strong><span>REQUIRED READ = GiB/TOKEN × MISS RATE × TOK/S</span></div>
+        <div class="controls">
+          <div class="range-control"><label for="ssd-bytes">활성 expert traffic</label><input id="ssd-bytes" data-ssd-bytes type="range" min="0.25" max="5" step="0.01" value="4.13"><output class="range-value" for="ssd-bytes" data-ssd-bytes-value>4.13 GiB/token</output></div>
+          <div class="range-control"><label for="ssd-hit">RAM·VRAM cache hit</label><input id="ssd-hit" data-ssd-hit type="range" min="0" max="95" step="5" value="50"><output class="range-value" for="ssd-hit" data-ssd-hit-value>50%</output></div>
+          <div class="range-control"><label for="ssd-rate">목표 decode 속도</label><input id="ssd-rate" data-ssd-rate type="range" min="0.5" max="10" step="0.5" value="1"><output class="range-value" for="ssd-rate" data-ssd-rate-value>1.0 tok/s</output></div>
+        </div>
+        <div class="memory-lane">
+          <div class="memory-label">필요 SSD read<small>8 GiB/s scale</small></div>
+          <div class="bar-track" role="progressbar" aria-label="필요한 SSD 지속 읽기 대역폭" aria-valuemin="0" aria-valuemax="8" aria-valuenow="2.07"><div class="bar-fill" data-ssd-bandwidth-bar style="width:25.8%"></div></div>
+          <div class="memory-value" data-ssd-bandwidth-value>2.07 GiB/s</div>
+        </div>
+        <p class="chart-caption">기본 4.13GiB/token은 GLM-4.5-Air Q4_K_M disk-streaming PoC의 pure-streaming 관측값이다. 모델·quant·top-K·batch마다 바뀐다. 이 계산은 대역폭 하한이며 random-read tail과 staging copy를 포함하지 않는다.</p>
+        <div class="sim-result" data-ssd-result aria-live="polite"></div>
+      </div>
+
+      <div class="comparison-scroll">
+        <table class="comparison-table">
+          <thead><tr><th>측정</th><th>환경</th><th>결과</th><th>읽는 법</th></tr></thead>
+          <tbody>
+            <tr><td class="method-col">FlashMoE paper</td><td>OLMoE-1B-7B, Qwen3-30B-A3B, 제한된 DRAM</td><td>ML cache가 LRU보다 throughput +22% / +7%</td><td>SSD load가 decode의 70% 이상이어서 hit율 개선이 end-to-end 이득으로 이어졌다.</td></tr>
+            <tr><td class="method-col">llama.cpp community PoC</td><td>RTX 4080 16GB, RAM 32GB, PCIe 3.0 NVMe, GLM-4.5-Air Q4</td><td>mmap 0.43 → async overlap 0.68 → hot block 0.75 tok/s</td><td>명시적 read가 이겼지만 여전히 1 tok/s 아래다. 16GiB cache는 0.60으로 오히려 느렸다.</td></tr>
+            <tr><td class="method-col">mbolt prefetch</td><td>M5 Pro, Qwen3-Next-80B-A3B 33GB</td><td>standalone tok/s +31–52%</td><td>이동 byte는 약 13GB로 같았다. read를 450KB에서 1.5MB로 키워 syscall·page-fault 낭비를 줄인 효과다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="ssd-decision">
+    <div class="section-head">
+      <div class="section-number">04 / DECISION</div>
+      <div>
+        <h2 id="ssd-decision">5090에서는 SSD를 세 번째 tier로 본다</h2>
+        <p class="section-intro">RAM에 checkpoint가 들어가면 FreeToken식 RAM expert bank가 먼저다. SSD streaming은 RAM까지 부족한 경우 모델을 실행하게 해 주는 capacity 기술이다. 같은 속도를 유지하는 마법은 아니다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="boundary-grid">
+        <div class="boundary-cell"><span class="boundary-icon">YES</span><strong>MoE capacity 확장</strong><p>shared weight·router·KV는 RAM에 남기고 cold expert만 NVMe에 두면 RAM보다 큰 sparse model도 구조적으로 실행할 수 있다.</p></div>
+        <div class="boundary-cell risky"><span class="boundary-icon">CONDITIONAL</span><strong>실용 속도</strong><p>높은 cache hit, expert-contiguous layout, async read, compute overlap이 동시에 맞아야 한다. concurrency가 커지면 더 많은 expert가 활성화돼 이점이 줄 수 있다.</p></div>
+        <div class="boundary-cell no"><span class="boundary-icon">NOT YET</span><strong>안정적인 범용 옵션</strong><p>llama.cpp의 SSD expert streaming과 expert cache 제안은 PoC·discussion·닫힌 미병합 PR 단계다. 일반 release의 지원 기능처럼 안내하면 안 된다.</p></div>
+      </div>
+
+      <div class="method-grid" style="margin-top:12px">
+        <article class="method-card" data-family="lookup">
+          <div class="method-top"><div><span class="method-kind">PREFERRED</span><h3 class="method-name">충분한 RAM</h3></div><span class="method-badge">RAM BANK</span></div>
+          <div class="method-line"><span>구성</span><span>VRAM hot cache + pinned RAM expert bank + NVMe checkpoint storage.</span></div>
+          <div class="method-line"><span>장점</span><span>decode 중 SSD read를 피한다. 96–128GB RAM에서 60.8GiB gpt-oss-120b는 이 경로부터 검토한다.</span></div>
+        </article>
+        <article class="method-card" data-family="preview">
+          <div class="method-top"><div><span class="method-kind">LAST CAPACITY TIER</span><h3 class="method-name">부족한 RAM</h3></div><span class="method-badge">SSD STREAM</span></div>
+          <div class="method-line"><span>구성</span><span>shared state만 RAM에 고정하고 expert slice를 NVMe에서 on demand read.</span></div>
+          <div class="method-line"><span>검증</span><span>cold/warm tok/s, TTFT, GB read/token, cache hit, major fault, NVMe utilization을 함께 기록.</span></div>
+        </article>
+      </div>
+      <div class="takeaway warning"><div class="takeaway-mark">!</div><p><strong>에너지 비용도 남는다.</strong> IEEE CAL 분석은 현재 SSD offload가 HBM baseline보다 token당 에너지를 최대 약 12배 높일 수 있다고 모델링했다. prefetch는 latency를 숨겨도 flash read 자체의 에너지는 없애지 못한다.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="ssd-sources">
+    <div class="section-head"><div class="section-number">05 / SOURCES</div><div><h2 id="ssd-sources">근거</h2><p class="section-intro">논문 결과, upstream 상태, community PoC를 같은 수준의 증거처럼 섞지 않았다.</p></div></div>
+    <div class="section-body">
+      <ol class="source-list">
+        <li><span class="source-index">01</span><a href="https://arxiv.org/abs/2601.17063" target="_blank" rel="noreferrer">FlashMoE · SSD I/O와 ML cache replacement</a><span class="source-type">PAPER</span></li>
+        <li><span class="source-index">02</span><a href="https://arxiv.org/abs/2607.24787" target="_blank" rel="noreferrer">SpecPrefetch · next-layer expert prefetch</a><span class="source-type">PAPER + CODE</span></li>
+        <li><span class="source-index">03</span><a href="https://arxiv.org/abs/2508.06978" target="_blank" rel="noreferrer">SSD offloading energy analysis</a><span class="source-type">IEEE CAL</span></li>
+        <li><span class="source-index">04</span><a href="https://github.com/ggml-org/llama.cpp/discussions/23324" target="_blank" rel="noreferrer">llama.cpp · disk-backed expert streaming RFC and measurements</a><span class="source-type">COMMUNITY POC</span></li>
+        <li><span class="source-index">05</span><a href="https://github.com/ggml-org/llama.cpp/discussions/25779" target="_blank" rel="noreferrer">llama.cpp · explicit-read prefetch measurements</a><span class="source-type">COMMUNITY POC</span></li>
+        <li><span class="source-index">06</span><a href="https://github.com/ggml-org/llama.cpp/pull/26824" target="_blank" rel="noreferrer">llama.cpp · expert cache proposal</a><span class="source-type">CLOSED · UNMERGED</span></li>
+      </ol>
+    </div>
+  </section>
+</article>

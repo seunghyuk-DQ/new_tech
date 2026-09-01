@@ -3,7 +3,7 @@
     {
       "date": "2026-09-01",
       "label": "01 SEP 2026",
-      "title": "Speculative systems",
+      "title": "Inference systems",
       "pages": [
         {
           "id": "drafter-models",
@@ -32,6 +32,13 @@
           "title": "Free Token 검증",
           "subtitle": "RTX 5090 + RAM · 120B",
           "file": "content/2026-09-01/04-free-token-120b.html"
+        },
+        {
+          "id": "ssd-expert-offloading",
+          "index": "05",
+          "title": "SSD expert offloading",
+          "subtitle": "NVMe · cache · prefetch",
+          "file": "content/2026-09-01/05-ssd-expert-offloading.html"
         }
       ]
     }

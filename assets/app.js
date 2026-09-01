@@ -141,9 +141,45 @@
     draw();
   }
 
+  function updateSsdOffloadCalculator(scope) {
+    const calculator = scope.querySelector("[data-ssd-calculator]");
+    if (!calculator) return;
+    const bytesInput = calculator.querySelector("[data-ssd-bytes]");
+    const hitInput = calculator.querySelector("[data-ssd-hit]");
+    const rateInput = calculator.querySelector("[data-ssd-rate]");
+    const bytesValue = calculator.querySelector("[data-ssd-bytes-value]");
+    const hitValue = calculator.querySelector("[data-ssd-hit-value]");
+    const rateValue = calculator.querySelector("[data-ssd-rate-value]");
+    const bandwidthValue = calculator.querySelector("[data-ssd-bandwidth-value]");
+    const bandwidthBar = calculator.querySelector("[data-ssd-bandwidth-bar]");
+    const result = calculator.querySelector("[data-ssd-result]");
+
+    const draw = () => {
+      const bytesPerToken = Number(bytesInput.value);
+      const hitRate = Number(hitInput.value) / 100;
+      const tokensPerSecond = Number(rateInput.value);
+      const requiredBandwidth = bytesPerToken * (1 - hitRate) * tokensPerSecond;
+
+      bytesValue.textContent = `${bytesPerToken.toFixed(2)} GiB/token`;
+      hitValue.textContent = `${Math.round(hitRate * 100)}%`;
+      rateValue.textContent = `${tokensPerSecond.toFixed(1)} tok/s`;
+      bandwidthValue.textContent = `${requiredBandwidth.toFixed(2)} GiB/s`;
+      bandwidthBar.style.width = `${Math.min(100, requiredBandwidth / 8 * 100)}%`;
+      bandwidthBar.parentElement.setAttribute("aria-valuenow", Math.min(8, requiredBandwidth).toFixed(2));
+      bandwidthBar.parentElement.setAttribute("aria-valuetext", `필요한 지속 읽기 ${requiredBandwidth.toFixed(2)} GiB/s`);
+
+      result.className = requiredBandwidth > 4 ? "sim-result warn" : "sim-result";
+      result.textContent = `miss expert만 계산해도 SSD가 지속적으로 ${requiredBandwidth.toFixed(2)} GiB/s를 공급해야 합니다. page fault, 작은 read, dequant, 복사는 이 값에 추가됩니다.`;
+    };
+
+    [bytesInput, hitInput, rateInput].forEach(input => input.addEventListener("input", draw));
+    draw();
+  }
+
   function initArticle(page) {
     updateMemorySimulator(root);
     updateCacheCalculator(root);
+    updateSsdOffloadCalculator(root);
     root.querySelectorAll("a[href^='#']").forEach(link => {
       link.addEventListener("click", () => toggleNav(false));
     });
