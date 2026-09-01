@@ -7,17 +7,34 @@
   const sidebarClose = document.getElementById("sidebar-close");
   const scrim = document.getElementById("sidebar-scrim");
   const modeButton = document.getElementById("mode-button");
+  const embeddedContent = window.__NEW_TECH_CONTENT__;
   let manifest;
   let pages = [];
 
+  function readStoredTheme() {
+    try {
+      return localStorage.getItem("new-tech-theme");
+    } catch {
+      return null;
+    }
+  }
+
+  function storeTheme(theme) {
+    try {
+      localStorage.setItem("new-tech-theme", theme);
+    } catch {
+      // Sandboxed bookmark previews intentionally disable storage access.
+    }
+  }
+
   function setTheme(theme) {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("new-tech-theme", theme);
+    storeTheme(theme);
     modeButton.textContent = theme === "dark" ? "☼" : "◐";
     modeButton.setAttribute("aria-label", theme === "dark" ? "밝은 모드로 전환" : "어두운 모드로 전환");
   }
 
-  const savedTheme = localStorage.getItem("new-tech-theme");
+  const savedTheme = readStoredTheme();
   const preferredTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   setTheme(savedTheme || preferredTheme);
   modeButton.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
@@ -143,9 +160,12 @@
 
     root.setAttribute("aria-busy", "true");
     try {
-      const response = await fetch(page.file, { cache: "no-cache" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const html = await response.text();
+      let html = embeddedContent?.pages?.[page.file];
+      if (typeof html !== "string") {
+        const response = await fetch(page.file, { cache: "no-cache" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        html = await response.text();
+      }
       root.innerHTML = `${html}${articleNavigation(page)}`;
       crumbs.textContent = `${page.date.replaceAll("-", ".")} / ${page.index} ${page.title}`;
       document.title = `${page.title} · NEW_TECH`;
@@ -168,9 +188,12 @@
 
   async function init() {
     try {
-      const response = await fetch("content/manifest.json", { cache: "no-cache" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      manifest = await response.json();
+      manifest = embeddedContent?.manifest;
+      if (!manifest) {
+        const response = await fetch("content/manifest.json", { cache: "no-cache" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        manifest = await response.json();
+      }
       pages = flattenPages(manifest);
       renderNav(manifest);
       await loadPage();

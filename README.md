@@ -17,7 +17,7 @@ uv run --no-project python -m http.server 8000 --bind 0.0.0.0
 
 ## 북마크 HTML CD
 
-`main` 브랜치에 커밋이 push될 때마다 `.github/workflows/deploy-bookmark-site.yml`이 실행됩니다. 북마크 서버는 내부망에 있으므로 GitHub hosted runner가 아니라 이 네트워크의 repo 전용 self-hosted runner `new-tech-cd-local`이 작업을 받습니다. 워크플로는 `index.html`, `new_tech.html`, `assets/`, `content/`를 하나의 HTML 사이트 revision으로 업로드하고, 업로드 직후 status와 실제 진입 HTML을 다시 확인합니다.
+`main` 브랜치에 커밋이 push될 때마다 `.github/workflows/deploy-bookmark-site.yml`이 실행됩니다. 북마크 서버는 내부망에 있으므로 GitHub hosted runner가 아니라 이 네트워크의 repo 전용 self-hosted runner `new-tech-cd-local`이 작업을 받습니다. 워크플로는 서비스의 sandbox 정책에 맞춰 CSS, JavaScript, 날짜별 문서를 하나의 `new_tech.html`로 묶어 새 revision으로 업로드하고, 업로드 직후 status와 실제 진입 HTML을 다시 확인합니다.
 
 저장소에는 다음 GitHub Actions variables가 필요합니다.
 

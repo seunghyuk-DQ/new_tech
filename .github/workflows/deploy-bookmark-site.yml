@@ -39,9 +39,15 @@ jobs:
           test -n "$BOOKMARK_SITE_ID"
           test -n "$BOOKMARK_ENTRY_PATH"
 
+      - name: Build sandbox-compatible HTML bundle
+        shell: bash
+        run: node scripts/build-bookmark-site.mjs output/bookmark-site
+
       - name: Upload HTML site revision
         id: deploy
         shell: bash
+        env:
+          BOOKMARK_SITE_ROOT: output/bookmark-site
         run: bash scripts/deploy-bookmark-site.sh update
 
       - name: Report deployment

@@ -10,6 +10,7 @@ site_id="${BOOKMARK_SITE_ID:-}"
 project_id="${BOOKMARK_PROJECT_ID:-}"
 title="${BOOKMARK_TITLE:-new_tech}"
 description="${BOOKMARK_DESCRIPTION:-새로운 추론 기술을 날짜별·개념별로 정리한 기술 공유 사이트}"
+site_root="${BOOKMARK_SITE_ROOT:-.}"
 
 fail() {
   echo "bookmark deploy: $*" >&2
@@ -18,9 +19,12 @@ fail() {
 
 [[ -n "$base_url" ]] || fail "BOOKMARK_BASE_URL is required"
 [[ "$mode" == "create" || "$mode" == "update" ]] || fail "mode must be create or update"
-[[ -f "$entry_path" ]] || fail "entry file does not exist: $entry_path"
 command -v curl >/dev/null || fail "curl is required"
 command -v jq >/dev/null || fail "jq is required"
+[[ -d "$site_root" ]] || fail "site root does not exist: $site_root"
+
+cd "$site_root"
+[[ -f "$entry_path" ]] || fail "entry file does not exist: $entry_path"
 
 base_url="${base_url%/}"
 
@@ -41,10 +45,15 @@ if [[ -n "${BOOKMARK_AUTH_TOKEN:-}" ]]; then
   curl_common+=(--header "Authorization: Bearer ${BOOKMARK_AUTH_TOKEN}")
 fi
 
-site_files=(index.html new_tech.html)
-while IFS= read -r -d '' path; do
-  site_files+=("$path")
-done < <(find assets content -type f -print0 | sort -z)
+site_files=()
+[[ -f index.html ]] && site_files+=(index.html)
+[[ "$entry_path" == "index.html" ]] || site_files+=("$entry_path")
+for directory in assets content; do
+  [[ -d "$directory" ]] || continue
+  while IFS= read -r -d '' path; do
+    site_files+=("$path")
+  done < <(find "$directory" -type f -print0 | sort -z)
+done
 
 file_count="${#site_files[@]}"
 (( file_count <= 500 )) || fail "site contains more than 500 files"
