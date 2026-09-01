@@ -15,7 +15,11 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - new-tech-cd
     timeout-minutes: 10
     env:
       BOOKMARK_BASE_URL: ${{ vars.BOOKMARK_BASE_URL }}

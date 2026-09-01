@@ -17,7 +17,7 @@ uv run --no-project python -m http.server 8000 --bind 0.0.0.0
 
 ## 북마크 HTML CD
 
-`main` 브랜치에 커밋이 push될 때마다 `.github/workflows/deploy-bookmark-site.yml`이 실행됩니다. 워크플로는 `index.html`, `new_tech.html`, `assets/`, `content/`를 하나의 HTML 사이트 revision으로 업로드하고, 업로드 직후 status와 실제 진입 HTML을 다시 확인합니다.
+`main` 브랜치에 커밋이 push될 때마다 `.github/workflows/deploy-bookmark-site.yml`이 실행됩니다. 북마크 서버는 내부망에 있으므로 GitHub hosted runner가 아니라 이 네트워크의 repo 전용 self-hosted runner `new-tech-cd-local`이 작업을 받습니다. 워크플로는 `index.html`, `new_tech.html`, `assets/`, `content/`를 하나의 HTML 사이트 revision으로 업로드하고, 업로드 직후 status와 실제 진입 HTML을 다시 확인합니다.
 
 저장소에는 다음 GitHub Actions variables가 필요합니다.
 
@@ -26,6 +26,12 @@ uv run --no-project python -m http.server 8000 --bind 0.0.0.0
 - `BOOKMARK_ENTRY_PATH`: `new_tech.html`
 
 서비스가 인증을 요구하도록 바뀌면 `BOOKMARK_AUTH_TOKEN` repository secret을 추가합니다. 현재 내부 인증서 체인은 GitHub runner가 신뢰하지 않으므로 워크플로에서 해당 서비스 요청에만 `BOOKMARK_INSECURE_TLS=1`을 적용합니다.
+
+로컬 runner 프로세스는 다음 명령으로 tmux 세션에서 시작합니다. 출력은 `/tmp/new-tech-cd-runner.log`에도 저장됩니다.
+
+```bash
+bash scripts/start-local-runner.sh
+```
 
 ## 새 날짜 추가
 

@@ -29,6 +29,8 @@ curl_common=(
   --show-error
   --fail-with-body
   --location
+  --connect-timeout "${BOOKMARK_CONNECT_TIMEOUT:-15}"
+  --max-time "${BOOKMARK_MAX_TIME:-180}"
 )
 
 if [[ "${BOOKMARK_INSECURE_TLS:-0}" == "1" ]]; then
