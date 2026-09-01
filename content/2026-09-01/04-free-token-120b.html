@@ -1,0 +1,178 @@
+<article class="article">
+  <header class="article-header" data-index="04">
+    <div class="eyebrow">FREETOKEN / EDGE-NATIVE MoE SERVING</div>
+    <h1>5090 + RAM으로 120B, "실행"은 가능하다</h1>
+    <p class="dek">FreeToken은 모델 전체를 32GB VRAM에 우겨 넣지 않는다. MoE expert pool을 host RAM에 두고 GPU cache·PCIe fetch·CPU compute를 조합한다. 그래서 <strong>구동 가능성과 80GB GPU급 성능은 반드시 분리</strong>해서 말해야 한다.</p>
+    <div class="header-meta">
+      <span class="meta-chip">FLASHML-ORG/FREETOKEN</span>
+      <span class="meta-chip">GPT-OSS-120B</span>
+      <span class="meta-chip">NO 5090+120B PUBLISHED BENCH</span>
+    </div>
+  </header>
+
+  <section class="section" aria-labelledby="freetoken-summary">
+    <div class="summary-grid" id="freetoken-summary">
+      <div class="summary-card accent">
+        <span class="label">Official checkpoint</span>
+        <span class="metric">60.8 GiB</span>
+        <p>gpt-oss-120b MXFP4. total 116.83B, token당 약 5.13B active인 MoE다.</p>
+      </div>
+      <div class="summary-card">
+        <span class="label">RTX 5090</span>
+        <span class="metric">32 GiB</span>
+        <p>전체 resident는 불가능. 일부 state와 hot experts만 GPU에 두는 계층화가 필요하다.</p>
+      </div>
+      <div class="summary-card">
+        <span class="label">Published 5090 + 120B TPS</span>
+        <span class="metric">없음</span>
+        <p>FreeToken paper는 이 정확한 조합의 tok/s·TTFT·context benchmark를 공개하지 않았다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="freetoken-identity">
+    <div class="section-head">
+      <div class="section-number">01 / IDENTITY</div>
+      <div>
+        <h2 id="freetoken-identity">먼저 동명이물을 분리한다</h2>
+        <p class="section-intro">이번 질문의 기술은 FlashML-org의 inference runtime이다. <code>freetoken.dev</code>는 하드웨어별 모델 적합성을 보여주는 비교 index이며 runtime이 아니다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="boundary-grid">
+        <div class="boundary-cell"><span class="boundary-icon">FREETOKEN RUNTIME</span><strong>실제 MoE serving engine</strong><p>expert offload, GPU LRU cache, CPU/GPU hybrid execution, KV와 runtime memory를 관리한다.</p></div>
+        <div class="boundary-cell risky"><span class="boundary-icon">FREETOKEN.DEV</span><strong>비교·추천 index</strong><p>모델·하드웨어 적합성을 탐색하는 웹사이트다. 속도 중 일부는 측정이 아닌 bandwidth-model estimate다.</p></div>
+        <div class="boundary-cell no"><span class="boundary-icon">FREE API TOKENS</span><strong>가격/할당량 개념</strong><p>이 문맥과 무관하다. 여기서 token은 MoE serving system의 이름이다.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="freetoken-flow">
+    <div class="section-head">
+      <div class="section-number">02 / RUNTIME</div>
+      <div>
+        <h2 id="freetoken-flow">GPU는 hot cache, RAM은 expert bank</h2>
+        <p class="section-intro">MoE는 total parameter가 커도 token마다 일부 expert만 활성화된다. FreeToken은 이 sparsity를 메모리 계층에 반영해, 매 step에 필요한 expert만 GPU로 가져오거나 CPU에서 계산한다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="visual-stage">
+        <div class="visual-title"><strong>한 MoE layer의 expert 실행</strong><span>ROUTE → CACHE HIT / MISS → MERGE</span></div>
+        <div class="flow-diagram" role="img" aria-label="MoE router가 expert를 선택하고 GPU cache hit 또는 RAM/CPU 경로로 실행하는 흐름">
+          <div class="flow-node draft">
+            <small>01 · router</small>
+            <div><strong>활성 expert 선택</strong><div class="token-row"><span class="token">E7</span><span class="token">E31</span><span class="token">E84</span></div></div>
+            <p>token마다 전체 expert가 아니라 top-K만 사용</p>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-node verify">
+            <small>02 · placement</small>
+            <div><strong>GPU hit · PCIe fetch · CPU</strong><div class="token-row"><span class="token ok">LRU</span><span class="token">RAM</span><span class="token">CPU</span></div></div>
+            <p>hybrid는 fetch 가능한 miss와 CPU compute를 겹침</p>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-node commit">
+            <small>03 · merge</small>
+            <div><strong>expert output 결합</strong><div class="token-row"><span class="token">Σ gate·E(x)</span></div></div>
+            <p>다음 layer로 진행, LRU cache는 hot expert를 유지</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="comparison-scroll">
+        <table class="comparison-table">
+          <thead><tr><th>FreeToken backend</th><th>Cache miss 처리</th><th>언제 유리한가</th><th>병목</th></tr></thead>
+          <tbody>
+            <tr><td class="method-col">offload</td><td>host RAM의 expert를 PCIe로 GPU에 fetch</td><td>PCIe가 빠르고 CPU compute보다 전송이 쌀 때</td><td>PCIe bandwidth·expert-cache hit</td></tr>
+            <tr><td class="method-col">cpu</td><td>miss expert를 CPU에서 바로 계산</td><td>RAM bandwidth·CPU kernel이 강하고 PCIe가 상대적으로 느릴 때</td><td>CPU SIMD·DRAM bandwidth</td></tr>
+            <tr><td class="method-col">hybrid</td><td>일부는 fetch, 나머지는 CPU compute</td><td>두 resource를 동시에 활용할 때</td><td>overlap·scheduling·workload 변화</td></tr>
+            <tr><td class="method-col">auto</td><td><code>ft bench bw</code> profile로 선택</td><td>머신별 CPU/PCIe 특성을 먼저 측정할 때</td><td>합성 bandwidth가 실제 serving tok/s를 보장하지 않음</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="freetoken-memory">
+    <div class="section-head">
+      <div class="section-number">03 / CAPACITY</div>
+      <div>
+        <h2 id="freetoken-memory">RAM을 더하면 무엇이 해결되나</h2>
+        <p class="section-intro">RAM은 checkpoint와 expert bank의 <em>용량</em>을 해결한다. 하지만 PCIe·DRAM bandwidth, CPU kernel, cache hit rate가 <em>속도</em>를 결정한다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="visual-stage" data-memory-simulator>
+        <div class="visual-title"><strong>RTX 5090 + RAM capacity sketch</strong><span>ESTIMATE · NOT A BENCHMARK</span></div>
+        <div class="controls">
+          <div class="range-control">
+            <label for="ram-size">시스템 RAM</label>
+            <input id="ram-size" type="range" min="64" max="192" step="16" value="96">
+            <output class="range-value" for="ram-size" data-ram-value>96 GiB</output>
+          </div>
+        </div>
+        <div class="memory-stack">
+          <div class="memory-lane">
+            <div class="memory-label">RTX 5090<small>illustrative split</small></div>
+            <div class="memory-bar"><div class="memory-segment gpu" style="width:87.5%">28G weights/cache</div><div class="memory-segment free" style="width:12.5%"></div></div>
+            <div class="memory-value">32 GiB</div>
+          </div>
+          <div class="memory-lane">
+            <div class="memory-label">System RAM<small>checkpoint remainder</small></div>
+            <div class="memory-bar"><div class="memory-segment ram" data-ram-segment style="width:34.2%">32.8G weights</div><div class="memory-segment free" data-free-segment style="width:65.8%">63.2G left</div></div>
+            <div class="memory-value" data-ram-value>96 GiB</div>
+          </div>
+        </div>
+        <p class="chart-caption">교육용 capacity sketch: 60.8GiB checkpoint 중 28GiB를 GPU weight/cache에 두고 4GiB를 runtime/KV 여유로 남긴 가정이다. 실제 FreeToken 배치는 non-expert weight, expert format, context와 cache policy에 따라 달라진다.</p>
+        <div class="sim-result" data-memory-result aria-live="polite"></div>
+      </div>
+
+      <div class="method-grid">
+        <article class="method-card" data-family="preview">
+          <div class="method-top"><div><span class="method-kind">64 GiB RAM</span><h3 class="method-name">매우 빡빡</h3></div><span class="method-badge">ESTIMATE</span></div>
+          <div class="method-line"><span>용량</span><span>60.8GiB checkpoint만으로도 RAM 전체에 가깝다.</span></div>
+          <div class="method-line"><span>빠진 것</span><span>OS, pinned buffers, page cache, non-expert placement, KV/context.</span></div>
+          <div class="method-line"><span>결론</span><span>"64GB면 충분"이라고 단정할 근거가 없다.</span></div>
+        </article>
+        <article class="method-card" data-family="lookup">
+          <div class="method-top"><div><span class="method-kind">96–128 GiB RAM</span><h3 class="method-name">현실적 출발점</h3></div><span class="method-badge">ESTIMATE</span></div>
+          <div class="method-line"><span>96GB</span><span>실험 가능한 headroom 후보. context와 concurrency는 보수적으로 시작.</span></div>
+          <div class="method-line"><span>128GB</span><span>OS·buffers·KV·page cache를 위한 더 실용적인 여유.</span></div>
+          <div class="method-line"><span>주의</span><span>published minimum이 아니라 checkpoint capacity에서 나온 planning 권고.</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="freetoken-verdict">
+    <div class="section-head">
+      <div class="section-number">04 / VERDICT</div>
+      <div>
+        <h2 id="freetoken-verdict">질문에 대한 정확한 답</h2>
+        <p class="section-intro">대상이 dense 120B가 아니라 gpt-oss-120b 같은 sparse MoE이고, 충분한 RAM과 지원 runtime을 쓰는 경우에만 "5090 한 장으로 120B를 돌린다"는 문장이 성립한다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="boundary-grid">
+        <div class="boundary-cell"><span class="boundary-icon">YES</span><strong>구조적으로 실행 가능</strong><p>FreeToken 지원 목록에 gpt-oss-120b가 있고 RTX 50 계열에서 MoE expert offload를 수행한다.</p></div>
+        <div class="boundary-cell risky"><span class="boundary-icon">CONDITIONAL</span><strong>충분한 free RAM 필요</strong><p>checkpoint 외에도 OS·runtime·KV가 필요하다. 96GB+는 합리적 시작 추정, 128GB는 여유 권고다.</p></div>
+        <div class="boundary-cell no"><span class="boundary-icon">NOT PROVEN</span><strong>빠르다는 보장은 없음</strong><p>FreeToken 논문에는 이 정확한 5090 + RAM + gpt-oss-120b 조합의 TPS/TTFT가 없다.</p></div>
+      </div>
+      <div class="takeaway warning"><div class="takeaway-mark">!</div><p><strong>구매/배포 판단 전 체크:</strong> exact checkpoint format, free RAM, PCIe generation·lanes, DRAM bandwidth, context/KV budget, expected concurrency, <code>ft bench bw</code>, 그리고 실제 prompt set의 tok/s·TTFT·tail latency.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="freetoken-sources">
+    <div class="section-head"><div class="section-number">05 / SOURCES</div><div><h2 id="freetoken-sources">근거</h2><p class="section-intro">runtime 기능, 논문 평가 범위, model memory를 각각 1차 출처로 확인했다.</p></div></div>
+    <div class="section-body">
+      <ol class="source-list">
+        <li><span class="source-index">01</span><a href="https://github.com/FlashML-org/FreeToken" target="_blank" rel="noreferrer">FlashML-org · FreeToken</a><span class="source-type">OFFICIAL REPO</span></li>
+        <li><span class="source-index">02</span><a href="https://arxiv.org/abs/2608.16157" target="_blank" rel="noreferrer">FreeToken: Efficient Edge-Native MoE Serving</a><span class="source-type">PAPER</span></li>
+        <li><span class="source-index">03</span><a href="https://github.com/FlashML-org/FreeToken/blob/main/docs/models.md" target="_blank" rel="noreferrer">FreeToken · Supported models and MoE backends</a><span class="source-type">OFFICIAL DOC</span></li>
+        <li><span class="source-index">04</span><a href="https://github.com/FlashML-org/FreeToken/blob/main/docs/cli.md" target="_blank" rel="noreferrer">FreeToken · CLI and bandwidth calibration</a><span class="source-type">OFFICIAL DOC</span></li>
+        <li><span class="source-index">05</span><a href="https://openai.com/index/introducing-gpt-oss/" target="_blank" rel="noreferrer">OpenAI · Introducing gpt-oss</a><span class="source-type">MODEL RELEASE</span></li>
+        <li><span class="source-index">06</span><a href="https://cdn.openai.com/pdf/419b6906-9da6-406c-a19d-1bb078ac7637/oai_gpt-oss_model_card.pdf" target="_blank" rel="noreferrer">OpenAI · gpt-oss model card</a><span class="source-type">MODEL CARD</span></li>
+      </ol>
+    </div>
+  </section>
+</article>

@@ -1,0 +1,161 @@
+<article class="article">
+  <header class="article-header" data-index="02">
+    <div class="eyebrow">TRAINING / TARGET-CONDITIONED SPECULATOR</div>
+    <h1>Drafter는 직접 만들 수 있다</h1>
+    <p class="dek">핵심은 작은 모델의 일반 지능이 아니다. <strong>정확히 그 target의 hidden state와 출력 분포</strong>를 실제 서비스 workload에서 얼마나 싸게 모사하느냐다.</p>
+    <div class="header-meta">
+      <span class="meta-chip">PUBLISHED FACT</span>
+      <span class="meta-chip">CAPACITY ESTIMATE</span>
+      <span class="meta-chip">vLLM SPECULATORS</span>
+    </div>
+  </header>
+
+  <section class="section" aria-labelledby="training-summary">
+    <div class="summary-grid" id="training-summary">
+      <div class="summary-card accent">
+        <span class="label">Answer</span>
+        <span class="metric">가능하다</span>
+        <p>EAGLE-3·DFlash·DSpark를 새로 학습하거나 기존 native MTP head를 fine-tune한다.</p>
+      </div>
+      <div class="summary-card">
+        <span class="label">Small published pilot</span>
+        <span class="metric">5K samples</span>
+        <p>공식 tutorial의 pipeline smoke 규모. production 품질을 보장하는 데이터량은 아니다.</p>
+      </div>
+      <div class="summary-card">
+        <span class="label">Hidden cache example</span>
+        <span class="metric">≈ 1.6 TB</span>
+        <p>50K samples · 평균 1,024 tokens · Llama 8B 조건의 공식 offline 안내 규모.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="training-pipeline">
+    <div class="section-head">
+      <div class="section-number">01 / PIPELINE</div>
+      <div>
+        <h2 id="training-pipeline">target의 습관을 증류한다</h2>
+        <p class="section-intro">기존 응답에 target tokenizer만 다시 씌우는 것으로는 부족하다. 배포할 exact target revision, chat template, thinking mode, sampling 설정으로 응답을 다시 만들어야 한다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="steps" aria-label="Drafter 학습 단계">
+        <div class="step"><div class="step-number">01</div><div class="step-content"><h3>대표 prompt를 수집한다</h3><p>chat·수학·코드·tool use·한국어 등 실제 트래픽 분포를 반영하고 hold-out 평가셋을 분리한다.</p></div></div>
+        <div class="step"><div class="step-number">02</div><div class="step-content"><h3>exact target으로 응답을 재생성한다</h3><p>target이 실제로 선택하는 continuation이 on-policy 학습 데이터다. 모델·tokenizer·template·thinking contract를 고정한다.</p></div></div>
+        <div class="step"><div class="step-number">03</div><div class="step-content"><h3>hidden states와 logits를 추출한다</h3><p>EAGLE-3는 target의 여러 layer hidden을, DFlash 계열은 block 조건용 target feature를 쓴다. KL 학습에는 target logits도 필요하다.</p></div></div>
+        <div class="step"><div class="step-number">04</div><div class="step-content"><h3>작은 speculator만 학습한다</h3><p>target은 동결한다. native MTP는 처음부터 호환 MTP layer가 있는 checkpoint의 head만 fine-tune하고 다시 stitch한다.</p></div></div>
+        <div class="step"><div class="step-number">05</div><div class="step-content"><h3>serving metric으로 판단한다</h3><p>training loss가 아니라 position별 acceptance, mean accepted length, draft latency, VRAM, 같은 workload의 end-to-end tok/s를 본다.</p></div></div>
+      </div>
+      <div class="takeaway">
+        <div class="takeaway-mark">↳</div>
+        <p><strong>Lossless는 학습 목표가 아니라 serving contract다.</strong> drafter가 좋아질수록 acceptance와 속도가 좋아지지만, 최종 target 분포 보존은 verifier의 rejection sampling/교정 경로가 책임진다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="training-data">
+    <div class="section-head">
+      <div class="section-number">02 / DATA</div>
+      <div>
+        <h2 id="training-data">어떤 데이터를 저장해야 하나</h2>
+        <p class="section-intro">저장 자산은 prompt·target response만이 아니다. target-conditioned 방식은 token 위치마다 거대한 hidden tensor를 요구한다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="comparison-scroll">
+        <table class="comparison-table">
+          <thead><tr><th>경로</th><th>필수 데이터</th><th>대표 loss</th><th>특징</th></tr></thead>
+          <tbody>
+            <tr><td class="method-col">외부 assistant</td><td>prompt + target continuation, 선택적으로 target logits</td><td>token CE + KL</td><td>구조는 단순하지만 target 내부 상태를 쓰지 않아 acceptance가 낮을 수 있다.</td></tr>
+            <tr><td class="method-col">EAGLE-3</td><td>target response + early/mid/late hidden + logits</td><td>target-logit KL</td><td>여러 target layer feature를 융합해 다음 draft token을 순차 예측한다.</td></tr>
+            <tr><td class="method-col">DFlash</td><td>target response + selected hidden states + block labels</td><td>block token objective</td><td>anchor 뒤 여러 미래 위치를 병렬 예측하도록 학습한다.</td></tr>
+            <tr><td class="method-col">DSpark</td><td>DFlash 자산 + Markov/confidence target</td><td>CE/TV + head losses</td><td>병렬 base logits, 인접 token 보정, prefix confidence를 함께 학습한다.</td></tr>
+            <tr><td class="method-col">Native MTP</td><td>호환 MTP checkpoint + shifted labels</td><td>step-weighted CE</td><td>임의 base에 사후 장착하는 방식이 아니다. 이미 있는 MTP layer만 fine-tune한다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="visual-stage" data-cache-calculator>
+        <div class="visual-title"><strong>Hidden-state cache 용량 감각</strong><span>ESTIMATE · h=4096 · 3 LAYERS · BF16 · AVG 1024 TOKENS</span></div>
+        <div class="controls">
+          <div class="range-control">
+            <label for="cache-samples">학습 sample 수</label>
+            <input id="cache-samples" data-cache-samples type="range" min="5000" max="50000" step="5000" value="5000">
+            <output class="range-value" for="cache-samples" data-cache-value>160 GiB</output>
+          </div>
+        </div>
+        <div class="bar-track" role="progressbar" aria-label="1.6TB 대비 예상 hidden cache" aria-valuemin="0" aria-valuemax="1600" aria-valuenow="160"><div class="bar-fill" data-cache-bar style="--value:0.3; width:10%"></div></div>
+        <p class="chart-caption">Raw lower bound는 <code>samples × avg_seq × hidden × captured_layers × bytes</code>. 파일 metadata·padding·logits를 포함한 practical planning 값은 더 커진다. 50K에서 약 1.6TB라는 공식 안내에 맞춰 scale했다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="training-modes">
+    <div class="section-head">
+      <div class="section-number">03 / MODES</div>
+      <div>
+        <h2 id="training-modes">GPU가 적으면 시간을 나눈다</h2>
+        <p class="section-intro">Online은 target server와 trainer를 동시에 유지한다. Offline은 target inference와 drafter training을 두 단계로 분리해 같은 GPU를 재사용하는 대신 SSD를 크게 쓴다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="boundary-grid">
+        <div class="boundary-cell"><span class="boundary-icon">ONLINE</span><strong>GPU 병렬, disk 절약</strong><p>hidden states를 실행 중 생성하고 버린다. target serving GPU와 training GPU가 동시에 필요하다.</p></div>
+        <div class="boundary-cell"><span class="boundary-icon">OFFLINE</span><strong>GPU 재사용, disk 소비</strong><p>hidden을 먼저 생성해 저장한다. 이후 target을 내리고 모든 GPU를 drafter 학습에 쓴다.</p></div>
+        <div class="boundary-cell risky"><span class="boundary-icon">HYBRID</span><strong>첫 epoch에 cache</strong><p>첫 epoch 생성 비용을 지불하고 이후 epoch에서 재사용한다. 초기 peak와 cache를 모두 계획한다.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="training-gpu">
+    <div class="section-head">
+      <div class="section-number">04 / GPU</div>
+      <div>
+        <h2 id="training-gpu">"몇 장?"에는 조건이 붙는다</h2>
+        <p class="section-intro">공개 tutorial 수치는 최소 사양이 아니다. target 크기, context, 추출 layer, draft layer 수, precision과 데이터량이 동시에 바뀐다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="method-grid">
+        <article class="method-card" data-family="lookup">
+          <div class="method-top"><div><span class="method-kind">PUBLISHED EXAMPLE</span><h3 class="method-name">H100 ×4 · Online</h3></div><span class="method-badge">FACT</span></div>
+          <div class="method-line"><span>구성</span><span>Qwen3-8B EAGLE-3, target/vLLM 2장 + training 2장.</span></div>
+          <div class="method-line"><span>규모</span><span>5K sample tutorial, 약 17분 보고.</span></div>
+          <div class="method-line"><span>해석</span><span>pipeline smoke. production acceptance를 보장하지 않는다.</span></div>
+        </article>
+        <article class="method-card" data-family="lookup">
+          <div class="method-top"><div><span class="method-kind">PUBLISHED EXAMPLE</span><h3 class="method-name">H100 ×2 · Offline</h3></div><span class="method-badge">FACT</span></div>
+          <div class="method-line"><span>구성</span><span>Llama-3.1-8B, hidden generation 후 2장으로 training.</span></div>
+          <div class="method-line"><span>규모</span><span>5K sample, data generation 포함 약 10분 보고.</span></div>
+          <div class="method-line"><span>해석</span><span>H100 수치를 5090/A100 시간으로 선형 환산하면 안 된다.</span></div>
+        </article>
+        <article class="method-card" data-family="preview">
+          <div class="method-top"><div><span class="method-kind">CAPACITY PLAN</span><h3 class="method-name">RTX 5090 ×1</h3></div><span class="method-badge">ESTIMATE</span></div>
+          <div class="method-line"><span>가능성</span><span>8B target, 4K context, 5K sample, 1-layer EAGLE offline two-phase pilot.</span></div>
+          <div class="method-line"><span>이유</span><span>target server와 trainer를 동시에 올리지 않고 32GB VRAM을 순차 재사용.</span></div>
+          <div class="method-line"><span>주의</span><span>공식 검증 recipe가 아니다. cache SSD 약 160GB부터 계획한다.</span></div>
+        </article>
+        <article class="method-card" data-family="preview">
+          <div class="method-top"><div><span class="method-kind">LARGE TARGET EXAMPLE</span><h3 class="method-name">70B · H100 ×8</h3></div><span class="method-badge">FACT</span></div>
+          <div class="method-line"><span>구성</span><span>hidden-state generation 예시가 TP4 × DP2로 8장 사용.</span></div>
+          <div class="method-line"><span>의미</span><span>70B/120B는 target inference 자체가 multi-GPU problem이다.</span></div>
+          <div class="method-line"><span>주의</span><span>CPU offload로 boot하는 것과 실용 속도로 training data를 만드는 것은 다르다.</span></div>
+        </article>
+      </div>
+      <div class="takeaway warning"><div class="takeaway-mark">!</div><p><strong>추천 시작점:</strong> 8B target 하나, 대표 prompt 5K, EAGLE-3 offline, 1 draft layer, 4K context. 파이프라인이 끝까지 돌아가고 position acceptance가 확인된 뒤 50K+와 DFlash/DSpark로 확장한다.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="training-sources">
+    <div class="section-head"><div class="section-number">05 / SOURCES</div><div><h2 id="training-sources">근거</h2><p class="section-intro">GPU 시간은 환경별 예시, cache는 산식과 공개 안내를 함께 표시했다.</p></div></div>
+    <div class="section-body">
+      <ol class="source-list">
+        <li><span class="source-index">01</span><a href="https://github.com/vllm-project/speculators/blob/main/docs/user_guide/tutorials/train.md" target="_blank" rel="noreferrer">vLLM Speculators · Train a Speculator</a><span class="source-type">OFFICIAL GUIDE</span></li>
+        <li><span class="source-index">02</span><a href="https://docs.vllm.ai/projects/speculators/en/stable/user_guide/tutorials/train_eagle3_offline/" target="_blank" rel="noreferrer">EAGLE-3 offline training guide</a><span class="source-type">OFFICIAL GUIDE</span></li>
+        <li><span class="source-index">03</span><a href="https://docs.vllm.ai/projects/speculators/en/stable/user_guide/tutorials/train_eagle3_online/" target="_blank" rel="noreferrer">EAGLE-3 online training guide</a><span class="source-type">OFFICIAL GUIDE</span></li>
+        <li><span class="source-index">04</span><a href="https://docs.vllm.ai/projects/speculators/en/latest/user_guide/algorithms/mtp/" target="_blank" rel="noreferrer">Native MTP algorithm and fine-tuning</a><span class="source-type">OFFICIAL DOC</span></li>
+        <li><span class="source-index">05</span><a href="https://github.com/deepseek-ai/DeepSpec" target="_blank" rel="noreferrer">DeepSeek · DeepSpec</a><span class="source-type">RESEARCH REPO</span></li>
+      </ol>
+    </div>
+  </section>
+</article>

@@ -1,0 +1,39 @@
+{
+  "days": [
+    {
+      "date": "2026-09-01",
+      "label": "01 SEP 2026",
+      "title": "Speculative systems",
+      "pages": [
+        {
+          "id": "drafter-models",
+          "index": "01",
+          "title": "Drafter 지도",
+          "subtitle": "MTP · EAGLE · DFlash 계열",
+          "file": "content/2026-09-01/01-drafter-models.html"
+        },
+        {
+          "id": "training-a-drafter",
+          "index": "02",
+          "title": "직접 학습하기",
+          "subtitle": "데이터 · GPU · 저장공간",
+          "file": "content/2026-09-01/02-training-a-drafter.html"
+        },
+        {
+          "id": "qwen-ngram-table",
+          "index": "03",
+          "title": "Qwen n-gram table",
+          "subtitle": "51B PLE · RAM · SSD",
+          "file": "content/2026-09-01/03-qwen-ngram-table.html"
+        },
+        {
+          "id": "free-token-120b",
+          "index": "04",
+          "title": "Free Token 검증",
+          "subtitle": "RTX 5090 + RAM · 120B",
+          "file": "content/2026-09-01/04-free-token-120b.html"
+        }
+      ]
+    }
+  ]
+}

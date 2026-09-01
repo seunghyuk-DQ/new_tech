@@ -1,0 +1,205 @@
+<article class="article">
+  <header class="article-header" data-index="01">
+    <div class="eyebrow">SPECULATIVE DECODING / FIELD MAP</div>
+    <h1>Drafter는 하나의 모델이 아니다</h1>
+    <p class="dek">작은 언어모델부터 target 내부 MTP, target-conditioned EAGLE, 병렬 block drafter까지. 이름보다 중요한 것은 <strong>후보를 어떤 정보로, 몇 번의 계산으로 만드느냐</strong>다.</p>
+    <div class="header-meta">
+      <span class="meta-chip">UPDATED 2026-09-01</span>
+      <span class="meta-chip">vLLM 2026-08-23 REPORT</span>
+      <span class="meta-chip">DFlash2 = PREVIEW</span>
+    </div>
+  </header>
+
+  <section class="section" aria-labelledby="drafter-summary">
+    <div class="summary-grid" id="drafter-summary">
+      <div class="summary-card accent">
+        <span class="label">Core contract</span>
+        <span class="metric">Draft → Verify</span>
+        <p>후보는 임시다. target verifier가 왼쪽부터 승인하고 첫 불일치에서 교체한다.</p>
+      </div>
+      <div class="summary-card">
+        <span class="label">Main design axis</span>
+        <span class="metric">순차 ↔ 병렬</span>
+        <p>MTP·EAGLE은 후보를 순차 생성한다. DFlash 계열은 block 계산을 병렬화한다.</p>
+      </div>
+      <div class="summary-card">
+        <span class="label">Largest reported ratio</span>
+        <span class="metric">2.87×</span>
+        <p>Gemma 4 26B-A4B · DFlash · MATH500. AMD/vLLM 측정 sweep 안의 최고값이다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="drafter-contract">
+    <div class="section-head">
+      <div class="section-number">01 / CONTRACT</div>
+      <div>
+        <h2 id="drafter-contract">큰 모델의 한 번을 넓게 쓴다</h2>
+        <p class="section-intro">표준 autoregressive decode는 target을 한 토큰마다 다시 호출한다. speculative decoding은 가벼운 proposer가 미래 후보를 먼저 만들고, target의 한 번의 넓은 pass로 여러 위치를 검증한다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="visual-stage">
+        <div class="visual-title">
+          <strong>한 speculative round</strong>
+          <span>LEFT-TO-RIGHT ACCEPTANCE</span>
+        </div>
+        <div class="flow-diagram" role="img" aria-label="확정 prefix에서 drafter가 후보를 제안하고 target이 검증해 토큰을 확정하는 흐름">
+          <div class="flow-node draft">
+            <small>01 · proposer</small>
+            <div>
+              <strong>후보 N개 제안</strong>
+              <div class="token-row"><span class="token">d1</span><span class="token">d2</span><span class="token">d3</span><span class="token">d4</span></div>
+            </div>
+            <p>작은 LM · MTP · EAGLE · DFlash · lookup</p>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-node verify">
+            <small>02 · target verifier</small>
+            <div>
+              <strong>한 pass로 N 위치 검사</strong>
+              <div class="token-row"><span class="token ok">✓</span><span class="token ok">✓</span><span class="token no">✕</span><span class="token drop">–</span></div>
+            </div>
+            <p>첫 reject 뒤 후보는 폐기, reject 위치는 target token으로 교체</p>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-node commit">
+            <small>03 · commit</small>
+            <div>
+              <strong>2 draft + 1 target</strong>
+              <div class="token-row"><span class="token">d1</span><span class="token">d2</span><span class="token">t3</span></div>
+            </div>
+            <p>검증이 올바르면 target의 greedy output 또는 sampling distribution을 보존</p>
+          </div>
+        </div>
+      </div>
+      <div class="takeaway">
+        <div class="takeaway-mark">↳</div>
+        <p><strong>"acceptance가 높다 = 빠르다"는 아니다.</strong> 실제 이득은 절약한 target decode 비용이 draft·verify·메모리 비용보다 클 때 생긴다. 그래서 mean accepted length, draft latency, VRAM, end-to-end throughput을 같이 본다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="drafter-taxonomy">
+    <div class="section-head">
+      <div class="section-number">02 / TAXONOMY</div>
+      <div>
+        <h2 id="drafter-taxonomy">후보를 만드는 여섯 가지 방식</h2>
+        <p class="section-intro">target 정보 사용 여부와 block 내부 의존성을 기준으로 보면, 사용자의 MTP → DFlash → DSpark → DFlash2 설명은 큰 방향에서 맞다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="method-grid">
+        <article class="method-card" data-family="sequential">
+          <div class="method-top"><div><span class="method-kind">MODEL-INTEGRATED</span><h3 class="method-name">Native / Gemma MTP</h3></div><span class="method-badge">SEQUENTIAL</span></div>
+          <div class="method-line"><span>입력</span><span>target hidden + 현재 draft token. Gemma assistant는 target activation/KV를 공유.</span></div>
+          <div class="method-line"><span>강점</span><span>target에 밀착되어 acceptance가 높고 native MTP는 추가 checkpoint가 없다.</span></div>
+          <div class="method-line"><span>약점</span><span>N이 늘면 MTP path도 반복 실행된다. native head가 없는 모델에는 바로 붙일 수 없다.</span></div>
+        </article>
+
+        <article class="method-card" data-family="sequential">
+          <div class="method-top"><div><span class="method-kind">TARGET-CONDITIONED</span><h3 class="method-name">EAGLE-3</h3></div><span class="method-badge">SEQUENTIAL</span></div>
+          <div class="method-line"><span>입력</span><span>target early·middle·late hidden states를 융합하고 sampled-token embedding을 결합.</span></div>
+          <div class="method-line"><span>강점</span><span>앞에서 뽑힌 token이 다음 draft에 직접 영향을 줘 문장 일관성이 좋다.</span></div>
+          <div class="method-line"><span>약점</span><span>후보마다 작은 decoder를 순차 실행하므로 긴 proposal에서 draft latency가 누적된다.</span></div>
+        </article>
+
+        <article class="method-card" data-family="parallel">
+          <div class="method-top"><div><span class="method-kind">BLOCK DIFFUSION</span><h3 class="method-name">DFlash</h3></div><span class="method-badge">PARALLEL</span></div>
+          <div class="method-line"><span>입력</span><span>확정 anchor + mask block. target hidden을 각 draft layer의 추가 K/V로 사용.</span></div>
+          <div class="method-line"><span>강점</span><span>모든 미래 위치를 한 forward에서 예측해 긴 block의 draft 비용을 낮춘다.</span></div>
+          <div class="method-line"><span>약점</span><span>후반 위치가 같은 pass에서 실제 선택된 앞 token을 보지 못해 조합이 어색해질 수 있다.</span></div>
+        </article>
+
+        <article class="method-card" data-family="parallel">
+          <div class="method-top"><div><span class="method-kind">PARALLEL + CORRECTION</span><h3 class="method-name">DSpark</h3></div><span class="method-badge">HYBRID</span></div>
+          <div class="method-line"><span>입력</span><span>DFlash base logits + 직전 선택 token에서 만든 저비용 Markov bias.</span></div>
+          <div class="method-line"><span>강점</span><span>backbone은 한 번만 돌리고 작은 순차 head로 block 내부 의존성을 보정한다.</span></div>
+          <div class="method-line"><span>주의</span><span>confidence prefix selection은 설계에 있지만, AMD/vLLM 보고서의 실험 경로에서는 비활성이었다.</span></div>
+        </article>
+
+        <article class="method-card" data-family="preview">
+          <div class="method-top"><div><span class="method-kind">TOP-K PATH</span><h3 class="method-name">DFlash 2</h3></div><span class="method-badge">PREVIEW</span></div>
+          <div class="method-line"><span>입력</span><span>각 위치의 top-K 후보 전체 + 인접 후보 transition score + local dynamic convolution.</span></div>
+          <div class="method-line"><span>강점</span><span>top-1이 틀려도 top-K 안의 더 일관된 경로를 선택한다. 사용자 설명의 핵심이 정확하다.</span></div>
+          <div class="method-line"><span>주의</span><span>공개 checkpoint·PR build 기준의 최신 기능이다. 설치된 stable vLLM 지원을 별도 확인해야 한다.</span></div>
+        </article>
+
+        <article class="method-card" data-family="lookup">
+          <div class="method-top"><div><span class="method-kind">NO TRAINING</span><h3 class="method-name">Prompt n-gram</h3></div><span class="method-badge">LOOKUP</span></div>
+          <div class="method-line"><span>입력</span><span>현재 request의 prompt/accepted context 안에 이미 나온 token sequence.</span></div>
+          <div class="method-line"><span>강점</span><span>가중치와 추가 model KV가 없다. 코드 수정·복사·반복 텍스트에 특히 싸다.</span></div>
+          <div class="method-line"><span>약점</span><span>새로운 문장에는 후보가 없다. Qwen의 51B PLE n-gram table과는 완전히 다른 기능이다.</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="drafter-comparison">
+    <div class="section-head">
+      <div class="section-number">03 / DECISION</div>
+      <div>
+        <h2 id="drafter-comparison">선택은 acceptance가 아니라 병목에서</h2>
+        <p class="section-intro">작은 batch와 비싼 target decode에서는 병렬 drafter의 장점이 크게 보인다. 높은 concurrency에서는 verifier가 이미 효율적으로 batching되어 speculative overhead가 이득을 상쇄할 수 있다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="comparison-scroll">
+        <table class="comparison-table">
+          <thead><tr><th>방법</th><th>추가 checkpoint</th><th>후보 생성</th><th>잘 맞는 상황</th><th>운영 위험</th></tr></thead>
+          <tbody>
+            <tr><td class="method-col">작은 AR LM</td><td>필요</td><td>순차</td><td>target 변경이 어렵고 독립 draft model을 쉽게 구할 때</td><td>별도 weight/KV, target과 분포가 다르면 낮은 acceptance</td></tr>
+            <tr><td class="method-col">Native MTP</td><td>없음</td><td>순차</td><td>checkpoint에 MTP가 내장된 Qwen 계열</td><td>N 증가 시 순차 비용, 지원 아키텍처 한정</td></tr>
+            <tr><td class="method-col">Gemma MTP</td><td>필요</td><td>순차</td><td>공식 target-assistant pair가 있을 때</td><td>정확한 target revision pairing 필요</td></tr>
+            <tr><td class="method-col">EAGLE-3</td><td>필요</td><td>순차</td><td>성숙한 target-conditioned baseline이 필요할 때</td><td>긴 proposal의 draft latency</td></tr>
+            <tr><td class="method-col">DFlash / DSpark</td><td>필요</td><td>병렬 / hybrid</td><td>긴 block, 낮은 concurrency, target decode가 비쌀 때</td><td>고정 block 학습, runtime·GPU별 지원 차이</td></tr>
+            <tr><td class="method-col">DFlash 2</td><td>필요</td><td>병렬 + path</td><td>top-K recall은 높지만 top-1 coherence가 약할 때</td><td>preview/main-only 경계, production 검증 부족</td></tr>
+            <tr><td class="method-col">Prompt n-gram</td><td>없음</td><td>lookup</td><td>코드 agent·편집·반복 출력</td><td>새 continuation에는 효과가 거의 없음</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="drafter-performance">
+    <div class="section-head">
+      <div class="section-number">04 / MEASURED</div>
+      <div>
+        <h2 id="drafter-performance">AMD/vLLM 보고서가 실제로 말한 것</h2>
+        <p class="section-intro">아래는 각 target·task·방법 sweep에서 보고된 최고 또는 범위다. 알고리즘의 보편 순위가 아니라 MI300X/MI355X, 해당 checkpoint와 workload에서의 관측값이다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="visual-stage">
+        <div class="visual-title"><strong>Baseline 대비 output-token throughput</strong><span>HIGHER IS BETTER · MAX WITHIN TESTED SWEEP</span></div>
+        <div class="bar-chart" role="img" aria-label="vLLM AMD 보고서의 speculative decoding throughput 배수 비교">
+          <div class="bar-row"><div class="bar-label">Gemma 4 26B · DFlash<small>MATH500</small></div><div class="bar-track"><div class="bar-fill" style="--value:2.87"></div></div><div class="bar-value">2.87×</div></div>
+          <div class="bar-row"><div class="bar-label">Gemma 4 26B · MTP<small>GSM8K</small></div><div class="bar-track"><div class="bar-fill" style="--value:2.74"></div></div><div class="bar-value">2.74×</div></div>
+          <div class="bar-row"><div class="bar-label">Gemma 4 31B · DFlash<small>MATH500</small></div><div class="bar-track"><div class="bar-fill" style="--value:2.34"></div></div><div class="bar-value">2.34×</div></div>
+          <div class="bar-row"><div class="bar-label">Qwen 3.5 122B · MTP<small>MATH500</small></div><div class="bar-track"><div class="bar-fill" style="--value:2.20"></div></div><div class="bar-value">2.20×</div></div>
+          <div class="bar-row"><div class="bar-label">Qwen 3 8B · DSpark<small>GSM8K</small></div><div class="bar-track"><div class="bar-fill" style="--value:1.63"></div></div><div class="bar-value">1.63×</div></div>
+          <div class="bar-row"><div class="bar-label">Qwen 3 8B · DFlash<small>GSM8K</small></div><div class="bar-track"><div class="bar-fill" style="--value:1.27"></div></div><div class="bar-value">1.27×</div></div>
+          <div class="chart-axis"><span></span><div class="axis-labels"><span>0×</span><span>1×</span><span>2×</span><span>3×</span></div><span></span></div>
+        </div>
+        <p class="chart-caption">출처: vLLM, 2026-08-23. proposal length N, model architecture, task, hardware와 checkpoint가 모두 다르다. DFlash2 수치는 이 보고서에 포함되지 않았다.</p>
+      </div>
+      <div class="takeaway warning">
+        <div class="takeaway-mark">!</div>
+        <p><strong>N=7 또는 N=11을 고정 정답으로 쓰지 않는다.</strong> 보고서에서도 후반 position acceptance가 떨어지면 더 긴 proposal이 오히려 regress할 수 있다고 경고한다. 대표 workload에서 N sweep과 concurrency sweep을 다시 해야 한다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="drafter-sources">
+    <div class="section-head"><div class="section-number">05 / SOURCES</div><div><h2 id="drafter-sources">근거</h2><p class="section-intro">성능 수치는 모델 카드가 아닌 원 측정 조건까지 연결한다.</p></div></div>
+    <div class="section-body">
+      <ol class="source-list">
+        <li><span class="source-index">01</span><a href="https://vllm.ai/blog/2026-08-23-speculative-decoding-amd-gpus" target="_blank" rel="noreferrer">vLLM · Exploring Speculative Decoding on AMD GPUs</a><span class="source-type">REPORT</span></li>
+        <li><span class="source-index">02</span><a href="https://github.com/vllm-project/speculators" target="_blank" rel="noreferrer">vLLM Project · Speculators</a><span class="source-type">OFFICIAL REPO</span></li>
+        <li><span class="source-index">03</span><a href="https://github.com/z-lab/dflash" target="_blank" rel="noreferrer">Z Lab · DFlash</a><span class="source-type">RESEARCH REPO</span></li>
+        <li><span class="source-index">04</span><a href="https://huggingface.co/z-lab/Qwen3.8-27B-DFlash2" target="_blank" rel="noreferrer">Z Lab · Qwen3.8-27B-DFlash2 model card</a><span class="source-type">MAINTAINER BENCH</span></li>
+        <li><span class="source-index">05</span><a href="https://arxiv.org/abs/2404.16710" target="_blank" rel="noreferrer">LayerSkip: Enabling Early Exit Inference and Self-Speculative Decoding</a><span class="source-type">PAPER</span></li>
+      </ol>
+    </div>
+  </section>
+</article>

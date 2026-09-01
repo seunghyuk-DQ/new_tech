@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="추론 시스템의 새 기술을 날짜와 개념별로 정리하는 한국어 기술 브리프">
+  <meta name="theme-color" content="#f3f2ed">
+  <title>NEW_TECH · Inference Notes</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#article-root">본문으로 이동</a>
+  <div class="site-shell">
+    <aside class="sidebar" id="sidebar" aria-label="기술 공유 목차">
+      <div class="brand-row">
+        <a class="brand" href="#drafter-models" aria-label="NEW TECH 홈">
+          <span class="brand-mark" aria-hidden="true">N/</span>
+          <span>NEW_TECH</span>
+        </a>
+        <button class="icon-button sidebar-close" id="sidebar-close" type="button" aria-label="목차 닫기">×</button>
+      </div>
+      <p class="brand-copy">날짜별로 쌓는 <br>inference field notes.</p>
+      <nav id="daily-nav" class="daily-nav" aria-label="날짜별 페이지"></nav>
+      <div class="sidebar-foot">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>Primary sources · 2026-09-01</span>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <button class="icon-button menu-button" id="menu-button" type="button" aria-label="목차 열기" aria-controls="sidebar" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="crumbs" id="crumbs" aria-live="polite">2026.09.01 / LOADING</div>
+        <div class="topbar-actions">
+          <span class="read-time" id="read-time"></span>
+          <button class="mode-button" id="mode-button" type="button" aria-label="색상 모드 전환">◐</button>
+        </div>
+      </header>
+
+      <main id="article-root" class="article-root" tabindex="-1" aria-live="polite">
+        <div class="loading-state">
+          <span class="loading-line"></span>
+          <span class="loading-line short"></span>
+          <p>기술 노트를 불러오는 중입니다.</p>
+        </div>
+      </main>
+
+      <footer class="site-footer">
+        <span>NEW_TECH / 2026</span>
+        <span>수치는 조건과 출처를 함께 읽습니다.</span>
+      </footer>
+    </div>
+  </div>
+  <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
+  <noscript>이 페이지는 날짜별 콘텐츠를 불러오기 위해 JavaScript가 필요합니다.</noscript>
+</body>
+</html>
