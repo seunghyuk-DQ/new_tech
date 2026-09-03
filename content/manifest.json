@@ -3,19 +3,19 @@
     {
       "date": "2026-09-01",
       "label": "2026년 09월 01일",
-      "title": "Inference systems",
+      "title": "추론 시스템",
       "pages": [
         {
           "id": "drafter-models",
           "index": "01",
-          "title": "Drafter 지도",
+          "title": "Drafter 종류와 선택 기준",
           "subtitle": "MTP · EAGLE · DFlash 계열",
           "file": "content/2026-09-01/01-drafter-models.html"
         },
         {
           "id": "training-a-drafter",
           "index": "02",
-          "title": "직접 학습하기",
+          "title": "Drafter 학습하기",
           "subtitle": "데이터 · GPU · 저장공간",
           "file": "content/2026-09-01/02-training-a-drafter.html"
         },
@@ -29,14 +29,14 @@
         {
           "id": "free-token-120b",
           "index": "04",
-          "title": "Free Token 검증",
+          "title": "FreeToken으로 120B 실행하기",
           "subtitle": "RTX 5090 + RAM · 120B",
           "file": "content/2026-09-01/04-free-token-120b.html"
         },
         {
           "id": "ssd-expert-offloading",
           "index": "05",
-          "title": "SSD expert offloading",
+          "title": "SSD로 expert offload하기",
           "subtitle": "NVMe · cache · prefetch",
           "file": "content/2026-09-01/05-ssd-expert-offloading.html"
         }

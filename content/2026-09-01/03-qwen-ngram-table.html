@@ -1,8 +1,8 @@
 <article class="article">
   <header class="article-header" data-index="03">
     <div class="eyebrow">QWEN3.8-FLASH-NEXT / PLE</div>
-    <h1>51B n-gram은 계산이 아니라 기억을 키운다</h1>
-    <p class="dek">Qwen3.8-Flash-Next의 n-gram embedding은 다음 token 후보를 복사하는 drafter가 아니다. 짧은 local pattern으로 거대한 학습 table을 조회해 <strong>초기 layer의 representation을 보강</strong>하는 모델 구성요소다.</p>
+    <h1>51B n-gram table은 sparse lookup 메모리다</h1>
+    <p class="dek">Qwen3.8-Flash-Next의 n-gram embedding은 다음 token을 복사하는 drafter가 아니다. 짧은 local pattern으로 학습된 table을 조회하고, 그 결과로 <strong>초기 layer의 hidden representation을 보강</strong>한다.</p>
     <div class="header-meta">
       <span class="meta-chip">EXACT NAME: QWEN3.8-FLASH-NEXT</span>
       <span class="meta-chip">20M ROWS</span>
@@ -15,17 +15,17 @@
       <div class="summary-card accent">
         <span class="label">Main model</span>
         <span class="metric">125B / 6B</span>
-        <p>본체 total / token당 activated parameters. sparse MoE compute 축이다.</p>
+        <p>본체는 총 125B지만 token당 약 6B만 활성화된다. Sparse MoE 계산에 쓰는 parameter다.</p>
       </div>
       <div class="summary-card">
         <span class="label">N-gram embedding</span>
         <span class="metric">+ 51B</span>
-        <p>2,000만 bigram/trigram row를 가진 PLE. 전체를 매 token matmul하지 않는다.</p>
+        <p>2,000만 개의 bigram과 trigram row를 가진 PLE다. 매 token마다 51B 전체를 matmul하지 않는다.</p>
       </div>
       <div class="summary-card">
         <span class="label">MTP component</span>
         <span class="metric">+ 4B</span>
-        <p>speculative draft용 별도 축. 51B PLE와 역할도 실행 경로도 다르다.</p>
+        <p>Speculative draft에 쓰는 별도 모듈이다. 51B PLE와는 역할도 실행 경로도 다르다.</p>
       </div>
     </div>
   </section>
@@ -34,29 +34,29 @@
     <div class="section-head">
       <div class="section-number">01 / IDENTITY</div>
       <div>
-        <h2 id="qwen-identity">같은 n-gram, 다른 세 기계</h2>
-        <p class="section-intro">팀에서 "n-gram"이라는 말을 들으면 먼저 어느 층의 기능인지 확인해야 한다. 이름은 같아도 목적·저장 위치·출력이 전부 다르다.</p>
+        <h2 id="qwen-identity">n-gram이라는 이름만 같고 역할은 다르다</h2>
+        <p class="section-intro">Qwen PLE, prompt lookup, MTP는 모두 n-gram이나 다음 token을 언급하지만 같은 기능이 아니다. 무엇을 저장하고 어떤 값을 내놓는지부터 구분해야 한다.</p>
       </div>
     </div>
     <div class="section-body">
       <div class="boundary-grid">
         <div class="boundary-cell">
           <span class="boundary-icon">QWEN PLE</span>
-          <strong>학습된 vector memory</strong>
-          <p>bigram/trigram을 hash해 51B parameter table의 row를 lookup하고 hidden representation에 delta를 더한다.</p>
+          <strong>학습된 vector table</strong>
+          <p>Bigram과 trigram을 hash해 51B parameter table에서 row를 찾고 hidden representation에 delta를 더한다.</p>
         </div>
         <div class="boundary-cell risky">
           <span class="boundary-icon">PROMPT LOOKUP</span>
-          <strong>반복 token 복사 후보</strong>
-          <p>현재 request 안에서 이미 나온 token sequence를 찾아 speculative 후보로 제안한다. 가중치가 없다.</p>
+          <strong>앞에 나온 token을 다시 제안</strong>
+          <p>현재 요청에 이미 나온 token sequence를 찾아 speculative 후보로 제안한다. 별도 가중치는 없다.</p>
         </div>
         <div class="boundary-cell no">
           <span class="boundary-icon">MTP</span>
-          <strong>미래 token proposer</strong>
-          <p>target hidden과 draft token으로 다음 후보를 예측한다. Qwen3.8-Flash-Next에는 별도 4B MTP가 있다.</p>
+          <strong>다음 token을 예측하는 모듈</strong>
+          <p>Target hidden state와 draft token으로 다음 후보를 예측한다. Qwen3.8-Flash-Next에는 별도의 4B MTP가 있다.</p>
         </div>
       </div>
-      <div class="takeaway"><div class="takeaway-mark">↳</div><p><strong>PLE는 "문장을 저장한 hash map"이 아니다.</strong> 짧은 token pattern이 학습된 embedding row의 주소가 될 뿐, 반환되는 것은 token 문자열이 아니라 dense vector다.</p></div>
+      <div class="takeaway"><div class="takeaway-mark">↳</div><p><strong>PLE에 문장이나 token 문자열을 저장하는 것은 아니다.</strong> 짧은 token pattern은 학습된 embedding row의 주소로 쓰인다. Lookup 결과는 문자열이 아니라 dense vector다.</p></div>
     </div>
   </section>
 
@@ -65,7 +65,7 @@
       <div class="section-number">02 / LOOKUP</div>
       <div>
         <h2 id="qwen-flow">51B 전체가 아니라 필요한 row만 읽는다</h2>
-        <p class="section-intro">Qwen 모델 카드는 2,000만 개 bigram/trigram entry가 layer 2에 들어간다고 설명한다. 주소는 token ID에서 결정되므로 early model compute와 lookup을 겹칠 수 있다.</p>
+        <p class="section-intro">Qwen 모델 카드에 따르면 layer 2에는 2,000만 개의 bigram과 trigram entry가 들어간다. 주소를 token ID만으로 계산할 수 있어서 앞쪽 layer 계산과 lookup을 겹쳐 실행할 수 있다.</p>
       </div>
     </div>
     <div class="section-body">
@@ -75,19 +75,19 @@
           <div class="flow-node draft">
             <small>01 · token ids</small>
             <div><strong>… 417, 92, 801</strong><div class="token-row"><span class="token">bi</span><span class="token">tri</span></div></div>
-            <p>EOS 경계를 넘지 않는 short local context</p>
+            <p>EOS 경계를 넘지 않는 짧은 local context</p>
           </div>
           <div class="flow-arrow" aria-hidden="true">→</div>
           <div class="flow-node verify">
             <small>02 · hash + gather</small>
             <div><strong>20M rows 중 일부</strong><div class="token-row"><span class="token">#4.2M</span><span class="token">#17.8M</span></div></div>
-            <p>host RAM의 PLE row를 async prefetch</p>
+            <p>host RAM에서 필요한 PLE row를 async prefetch</p>
           </div>
           <div class="flow-arrow" aria-hidden="true">→</div>
           <div class="flow-node commit">
             <small>03 · layer 2</small>
             <div><strong>hidden delta 주입</strong><div class="token-row"><span class="token">h + Δ</span></div></div>
-            <p>conv/projection으로 contextualize한 뒤 main network에 합류</p>
+            <p>conv와 projection을 거쳐 문맥을 반영한 뒤 main network에 합친다</p>
           </div>
         </div>
       </div>
@@ -99,7 +99,7 @@
           <div class="memory-lane"><div class="memory-label">PLE n-gram<small>sparse lookup</small></div><div class="memory-bar"><div class="memory-segment ram" style="width:28.3%">51B</div><div class="memory-segment free" style="width:71.7%"></div></div><div class="memory-value">51B</div></div>
           <div class="memory-lane"><div class="memory-label">MTP<small>future-token path</small></div><div class="memory-bar"><div class="memory-segment disk" style="width:2.3%"></div><div class="memory-segment free" style="width:97.7%"></div></div><div class="memory-value">4B</div></div>
         </div>
-        <p class="chart-caption">합계 180B를 dense 180B 모델처럼 해석하면 안 된다. main은 MoE로 6B가 활성화되고 PLE는 소수 row lookup, MTP는 speculative path다.</p>
+        <p class="chart-caption">합계가 180B라고 해서 dense 180B 모델처럼 계산하지는 않는다. Main model은 token당 약 6B가 활성화되고, PLE는 필요한 row만 읽으며, MTP는 speculative path에서만 실행된다.</p>
       </div>
     </div>
   </section>
@@ -108,8 +108,8 @@
     <div class="section-head">
       <div class="section-number">03 / OFFLOAD</div>
       <div>
-        <h2 id="qwen-offload">RAM은 공식 설계, SSD는 최신 runtime 옵션</h2>
-        <p class="section-intro">Qwen은 PLE를 host memory에 두고 address를 미리 계산해 async prefetch할 수 있다고 설명한다. SSD/NVMe를 상시 serving tier로 쓰는 것은 model architecture가 아니라 runtime 구현 문제다.</p>
+        <h2 id="qwen-offload">Qwen이 공식 설명한 범위는 RAM offload까지다</h2>
+        <p class="section-intro">Qwen은 PLE를 host memory에 두고 address를 미리 계산해 async prefetch할 수 있다고 설명한다. SSD나 NVMe를 상시 serving tier로 쓰려면 runtime이 별도로 지원해야 한다.</p>
       </div>
     </div>
     <div class="section-body">
@@ -117,9 +117,9 @@
         <table class="comparison-table">
           <thead><tr><th>배치 위치</th><th>현재 근거</th><th>데이터 경로</th><th>판정</th></tr></thead>
           <tbody>
-            <tr><td class="method-col">GPU HBM</td><td>일반 resident serving</td><td>device embedding gather</td><td>가장 단순·빠르지만 PLE만 약 51GB급이라 VRAM 요구가 크다.</td></tr>
-            <tr><td class="method-col">Host RAM</td><td>Qwen 공식 설명 + vLLM recipe</td><td>pinned RAM row gather → async GPU prefetch</td><td><strong>공식 offload 경계.</strong> 약 51GB와 runtime headroom을 RAM에 계획.</td></tr>
-            <tr><td class="method-col">SSD / NVMe</td><td>llama.cpp <code>tensor-read-lazy</code> merged 2026-08-30</td><td>mmap/lazy row read → page cache/staging → compute</td><td><strong>가능하지만 매우 최신.</strong> runtime·OS·NVMe·quant layout에 따라 latency가 달라진다.</td></tr>
+            <tr><td class="method-col">GPU HBM</td><td>일반 resident serving</td><td>device embedding gather</td><td>가장 단순하고 빠르다. 다만 PLE만 약 51GB라 VRAM 요구량이 크다.</td></tr>
+            <tr><td class="method-col">Host RAM</td><td>Qwen 공식 설명 + vLLM recipe</td><td>pinned RAM row gather → async GPU prefetch</td><td><strong>공식 문서가 설명하는 offload 방식이다.</strong> PLE 약 51GB와 runtime 여유 공간을 RAM에 잡아야 한다.</td></tr>
+            <tr><td class="method-col">SSD / NVMe</td><td>llama.cpp <code>tensor-read-lazy</code> merged 2026-08-30</td><td>mmap/lazy row read → page cache/staging → compute</td><td><strong>지원된 지 얼마 안 된 기능이다.</strong> Latency는 runtime, OS, NVMe, quant layout에 따라 달라진다.</td></tr>
           </tbody>
         </table>
       </div>
@@ -129,24 +129,24 @@
         <div class="method-grid">
           <article class="method-card" data-family="lookup">
             <div class="method-top"><div><span class="method-kind">OFFICIAL</span><h3 class="method-name">Host RAM</h3></div><span class="method-badge">SUPPORTED PATH</span></div>
-            <div class="method-line"><span>저장</span><span>51B PLE table을 pinned host memory에 resident.</span></div>
-            <div class="method-line"><span>decode</span><span>다음 lookup index를 미리 알고 필요한 row를 GPU compute와 겹쳐 전송.</span></div>
-            <div class="method-line"><span>병목</span><span>RAM capacity·bandwidth, PCIe, prefetch overlap.</span></div>
+            <div class="method-line"><span>저장</span><span>51B PLE table을 pinned host memory에 상주시킨다.</span></div>
+            <div class="method-line"><span>decode</span><span>다음 lookup index를 미리 계산하고 필요한 row 전송을 GPU 계산과 겹친다.</span></div>
+            <div class="method-line"><span>병목</span><span>RAM 용량과 대역폭, PCIe, prefetch가 계산과 겹치는 정도가 병목을 좌우한다.</span></div>
           </article>
           <article class="method-card" data-family="preview">
             <div class="method-top"><div><span class="method-kind">LLAMA.CPP MAIN</span><h3 class="method-name">SSD lazy-read</h3></div><span class="method-badge">EXPERIMENTAL</span></div>
-            <div class="method-line"><span>저장</span><span>mmap 가능한 model file에 tensor row를 두고 필요할 때 lazy read.</span></div>
-            <div class="method-line"><span>decode</span><span>NVMe → filesystem page cache/staging → row dequant/gather.</span></div>
-            <div class="method-line"><span>병목</span><span>random-read tail, page faults, cache warmness, OS별 mmap 동작.</span></div>
+            <div class="method-line"><span>저장</span><span>mmap 가능한 model file에 tensor row를 두고 필요할 때만 읽는다.</span></div>
+            <div class="method-line"><span>decode</span><span>NVMe에서 filesystem page cache와 staging을 거쳐 row를 dequant하고 gather한다.</span></div>
+            <div class="method-line"><span>병목</span><span>Random-read tail, page fault, cache 상태, OS별 mmap 동작에 영향을 받는다.</span></div>
           </article>
         </div>
       </div>
-      <div class="takeaway warning"><div class="takeaway-mark">!</div><p><strong>"SSD offload 가능"과 "성능 손실 없음"은 다른 주장이다.</strong> 공식 Qwen 문서는 host memory까지만 보장한다. SSD는 최신 llama.cpp build와 실제 NVMe에서 prefill·decode·tail latency를 따로 측정해야 한다.</p></div>
+      <div class="takeaway warning"><div class="takeaway-mark">!</div><p><strong>SSD offload를 지원한다고 해서 속도가 그대로 유지되지는 않는다.</strong> 공식 Qwen 문서가 다루는 범위는 host memory까지다. SSD 경로는 최신 llama.cpp build와 실제 NVMe에서 prefill, decode, tail latency를 따로 재야 한다.</p></div>
     </div>
   </section>
 
   <section class="section" aria-labelledby="qwen-sources">
-    <div class="section-head"><div class="section-number">04 / SOURCES</div><div><h2 id="qwen-sources">근거</h2><p class="section-intro">모델 구성, training implementation, runtime offload를 서로 다른 출처로 분리했다.</p></div></div>
+    <div class="section-head"><div class="section-number">04 / SOURCES</div><div><h2 id="qwen-sources">근거</h2><p class="section-intro">모델 구성은 공식 모델 카드, 학습 구현은 NeMo, runtime offload는 vLLM과 llama.cpp 자료로 각각 확인했다.</p></div></div>
     <div class="section-body">
       <ol class="source-list">
         <li><span class="source-index">01</span><a href="https://github.com/QwenLM/Qwen3.8-Flash-Next" target="_blank" rel="noreferrer">QwenLM · Qwen3.8-Flash-Next</a><span class="source-type">OFFICIAL REPO</span></li>
