@@ -489,3 +489,12 @@ input[type="range"] { accent-color: var(--green); }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0s !important; transition-duration: 0s !important; }
   ::view-transition-old(article), ::view-transition-new(article) { animation: none; }
 }
+
+.article :is(h1, h2, h3) {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.article h3 small { display: inline; font-size: inherit; }
+.article :has(> h1, > h2, > h3) { min-width: 0; }
+.article .method-top > div { flex: 1; }

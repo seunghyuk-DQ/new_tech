@@ -376,6 +376,30 @@
     readTime.textContent = `${Math.max(4, Math.round(words / 430))} MIN READ`;
   }
 
+  function fitArticleHeadings() {
+    root.querySelectorAll("h1, h2, h3").forEach(heading => {
+      heading.querySelectorAll("br").forEach(br => br.replaceWith(" "));
+      heading.style.removeProperty("font-size");
+      const available = heading.clientWidth;
+      if (!available) return;
+      const range = document.createRange();
+      range.selectNodeContents(heading);
+      const width = range.getBoundingClientRect().width;
+      if (width > available) {
+        const size = parseFloat(getComputedStyle(heading).fontSize);
+        heading.style.fontSize = `${Math.floor(size * (available - 1) / width * 100) / 100}px`;
+      }
+    });
+  }
+
+  let headingWidth = 0;
+  new ResizeObserver(([entry]) => {
+    if (entry.contentRect.width === headingWidth) return;
+    headingWidth = entry.contentRect.width;
+    fitArticleHeadings();
+  }).observe(root);
+  document.fonts.ready.then(fitArticleHeadings);
+
   async function loadPage({ preserveScroll = false } = {}) {
     const id = currentId();
     const page = pages.find(item => item.id === id) || pages[0];
@@ -396,6 +420,7 @@
         crumbs.textContent = `${page.date.replaceAll("-", ".")} / ${page.index} ${page.title}`;
         document.title = `${page.title} · NEW_TECH`;
         initArticle(page);
+        fitArticleHeadings();
       };
 
       if (hasRenderedPage && document.startViewTransition && !reducedMotionQuery.matches) {
