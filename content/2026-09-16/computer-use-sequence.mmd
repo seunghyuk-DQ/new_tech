@@ -1,0 +1,61 @@
+sequenceDiagram
+    actor User as 사용자
+    participant Model as GPT-6 Astra
+    participant Exec as Computer Use 실행기
+    participant Tldraw as tldraw
+    participant Screen as 스크린샷
+
+    User->>Model: "tldraw에서 마우스로 원숭이를 그려줘"
+
+    Model->>Exec: 현재 화면 스크린샷 요청
+    Exec->>Tldraw: 화면 캡처
+    Tldraw-->>Screen: 빈 캔버스 + tldraw 툴바
+    Screen-->>Model: 현재 화면 이미지 전달
+
+    Model->>Model: 캔버스 위치 파악
+    Model->>Model: Draw 도구 위치 파악
+    Model->>Model: 원숭이를 여러 개의 stroke로 분해
+
+    Model-->>Exec: click(x=..., y=...) - Draw 도구 선택
+    Exec->>Tldraw: Draw 도구 클릭
+    Tldraw-->>Screen: 자유 그리기 모드로 변경
+
+    Model-->>Exec: drag(path=머리 윤곽선)
+    Exec->>Tldraw: mouse_down → mouse_move 여러 번 → mouse_up
+    Tldraw-->>Screen: 머리 윤곽이 그려진 화면
+
+    Model-->>Exec: drag(path=왼쪽 귀)
+    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
+
+    Model-->>Exec: drag(path=오른쪽 귀)
+    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
+
+    Model-->>Exec: drag(path=왼쪽 눈)
+    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
+
+    Model-->>Exec: drag(path=오른쪽 눈)
+    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
+
+    Model-->>Exec: drag(path=입과 코)
+    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
+
+    Model-->>Exec: drag(path=몸통과 팔)
+    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
+
+    Model-->>Exec: drag(path=꼬리)
+    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
+
+    Exec->>Tldraw: 모든 stroke 실행 완료
+    Tldraw-->>Screen: 완성된 원숭이 화면
+    Screen-->>Model: 새 스크린샷 반환
+
+    Model->>Model: 원숭이 모양과 누락된 선 검증
+
+    alt 그림이 정상적으로 완성됨
+        Model-->>User: "원숭이를 그렸습니다."
+    else 선이 빠졌거나 모양이 이상함
+        Model-->>Exec: correction drag(path=누락된 선)
+        Exec->>Tldraw: 보정 stroke 실행
+        Tldraw-->>Model: 보정 후 스크린샷 반환
+        Model-->>User: "보정해서 완성했습니다."
+    end
