@@ -1,0 +1,252 @@
+<article class="article">
+<header class="article-header" data-index="01">
+<div class="eyebrow">LOCATEANYTHING / PARALLEL BOX DECODING</div>
+<h1>LocateAnything의 NTP + MTP 공동 학습</h1>
+<p class="dek">MoonViT 400M과 Qwen2.5 3B를 연결하고, 박스 단위 MTP를 NTP와 함께 학습한다. 적용할 핵심은 <strong>구조에 맞춘 토큰 블록</strong>과 <strong>순차 추론 성능까지 개선한 보조 학습 신호</strong>다.</p>
+<div class="header-meta"><span class="meta-chip">UPDATED 2026-09-16</span><span class="meta-chip">nvidia/LocateAnything-3B</span><span class="meta-chip">논문 보고 수치 · 자체 추론 측정 없음</span>
+</div>
+</header>
+<section class="section" aria-labelledby="locate-architecture">
+<div class="section-head">
+<div class="section-number">01 / ARCHITECTURE</div>
+<div>
+<h2 id="locate-architecture">MoonViT → MLP → Qwen2.5</h2>
+</div>
+</div>
+<div class="section-body">
+<div class="visual-stage">
+<div class="flow-diagram">
+<div class="flow-node draft"><strong>입력 이미지 → MoonViT</strong>
+<p>MoonViT-SO-400M · 약 0.4B<br>native-resolution 비전 인코더 → 시각 토큰</p>
+</div>
+<div class="flow-arrow" aria-hidden="true">→</div>
+<div class="flow-node verify"><strong>MLP → Qwen2.5</strong>
+<p>시각 특징을 언어 입력 차원으로 변환<br>Qwen2.5-3B-Instruct에 이미지 표현 + 사용자 query 입력</p>
+</div>
+<div class="flow-arrow" aria-hidden="true">→</div>
+<div class="flow-node commit"><strong>출력 / PBD</strong>
+<p>label + bounding box<br>Slow: NTP · Fast: MTP<br>Hybrid: MTP + 필요한 블록의 NTP 재생성</p>
+</div>
+</div>
+</div>
+<p>MoonViT는 Kimi 계열에서 사용하는 비전 인코더다. Native-resolution 처리는 작은 물체에 필요한 세부 공간 정보를 보존하는 데 유리하다. 다만 LocateAnything의 성능 향상을 비전 인코더 하나의 효과로 해석할 수는 없다.</p>
+<p>PBD(Parallel Box Decoding)는 박스 토큰을 생성하는 방식이다. 완성된 출력 뒤에 좌표를 다시 예측하는 별도 모델이 아니라, 같은 디코더의 출력 과정에 적용된다.</p>
+<p class="chart-caption">출처: <a href="https://huggingface.co/nvidia/LocateAnything-3B/blob/c32291ca5e996f5a7a485845b4f57a233936bba0/config.json" target="_blank" rel="noreferrer">공개 체크포인트 config.json</a>.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="locate-blocks">
+<div class="section-head">
+<div class="section-number">02 / BLOCKS</div>
+<div>
+<h2 id="locate-blocks">박스 하나를 길이 6의 블록으로 묶는다</h2>
+</div>
+</div>
+<div class="section-body">
+<pre class="formula"><code>t = &lt;ref&gt;label&lt;/ref&gt;
+b = &lt;box&gt;&lt;x1&gt;&lt;y1&gt;&lt;x2&gt;&lt;y2&gt;&lt;/box&gt;
+
+box block = 시작 토큰 1 + 좌표 토큰 4 + 종료 토큰 1 = 6</code>
+</pre>
+<p>좌표는 0~1000 범위로 정규화한 전용 토큰이다. 위 표기는 논문의 개념 표현이며 문자열의 글자 수를 세는 것이 아니다. Label은 별도의 semantic block으로 표현한다. 빈 칸은 <code>&lt;null&gt;</code>로 채우고, 긴 label은 여러 블록으로 나눈다.</p>
+<p><strong>Block-causal attention</strong>은 블록 사이에 순서를 유지하고 같은 블록 안에는 양방향 attention을 허용한다. 박스마다 네 좌표와 구조 토큰을 함께 예측하므로 임의의 토큰 길이로 잘라 서로 다른 박스의 일부를 한 블록에 섞는 문제를 줄인다.</p>
+<p class="chart-caption">출처: <a href="https://arxiv.org/html/2605.27365v1" target="_blank" rel="noreferrer">논문 §3.1–3.2</a>.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="locate-training">
+<div class="section-head">
+<div class="section-number">03 / TRAINING</div>
+<div>
+<h2 id="locate-training">공동 학습은 detection·grounding 단계에 적용한다</h2>
+</div>
+</div>
+<div class="section-body">
+<div class="comparison-scroll">
+<table class="comparison-table">
+<thead>
+<tr><th scope="col">전체 파이프라인</th><th scope="col">학습 내용</th><th scope="col">NTP + MTP</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Stage 1</td><td>Caption 중심 base VLM 학습</td><td>일반 NTP-style</td>
+</tr>
+<tr><td>Stage 2</td><td>General VQA, OCR, 수학, 과학 등 능력 확장</td><td>일반 NTP-style</td>
+</tr>
+<tr><td>Stage 3</td><td>LocateAnything detection / grounding 학습</td><td>Joint training</td>
+</tr>
+<tr><td>Stage 4</td><td>Dense detection 강화</td><td>Joint training</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>논문 본문에서 detection·grounding의 두 단계를 Stage-1 / Stage-2라고 부르는 부분은 전체 파이프라인의 Stage 3 / Stage 4에 해당한다. Stage 1은 MLP만 학습하고, Stage 2–4는 전체 구성 요소를 학습한다.</p>
+<p class="chart-caption">출처: <a href="https://arxiv.org/html/2605.27365v1" target="_blank" rel="noreferrer">논문 Appendix A.1 및 Table 7</a>.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="locate-loss">
+<div class="section-head">
+<div class="section-number">04 / LOSS</div>
+<div>
+<h2 id="locate-loss">같은 정답을 두 표현으로 학습한다</h2>
+</div>
+</div>
+<div class="section-body">
+<div class="visual-stage">
+<div class="flow-diagram">
+<div class="flow-node draft"><strong>동일한 GT → 두 입력</strong>
+<p>NTP: 이전 토큰을 순서대로 입력<br>MTP: anchor + [mask] block<br>공유 context: 이미지 + query</p>
+</div>
+<div class="flow-arrow" aria-hidden="true">→</div>
+<div class="flow-node verify"><strong>Transformer forward</strong>
+<p>입력을 연결하고 custom attention mask 적용<br>NTP logits → NTP Cross-Entropy<br>MTP logits → MTP Cross-Entropy</p>
+</div>
+<div class="flow-arrow" aria-hidden="true">→</div>
+<div class="flow-node commit"><strong>Loss 합산 → 역전파</strong>
+<p>L = L_NTP + L_MTP<br>공유 MoonViT / MLP projector / Qwen에 학습 신호 전달 (Stage 3–4)</p>
+</div>
+</div>
+</div>
+<p>일반화하면 <code>L = L_NTP + λ · L_MTP</code>로 쓸 수 있지만, 논문의 목적함수는 별도 가중치 없이 두 손실을 더한다. NTP는 next-token prediction, MTP는 multi-token prediction이다.</p>
+<p>NTP 경로는 causal attention을 사용한다. MTP 경로는 앞선 context와 같은 블록 내부 표현을 참조한다. <strong>같은 박스의 정답 좌표를 미리 보여주는 것은 아니다.</strong> 예측할 위치는 mask로 가리고, NTP·MTP 경로를 분리해 정답 누출을 막는다.</p>
+<p class="chart-caption">출처: <a href="https://arxiv.org/html/2605.27365v1" target="_blank" rel="noreferrer">논문 §3.2 및 Figure 4</a>.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="locate-results">
+<div class="section-head">
+<div class="section-number">05 / RESULTS</div>
+<div>
+<h2 id="locate-results">MTP 학습 신호는 Slow의 NTP 성능도 높였다</h2>
+</div>
+</div>
+<div class="section-body">
+<h3>COCO ablation · Table 6(c)</h3>
+<div class="comparison-scroll">
+<table class="comparison-table">
+<thead>
+<tr><th scope="col">학습 손실</th><th scope="col">추론 모드</th><th scope="col">F1</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>L_NTP</td><td>Slow</td><td>50.1</td>
+</tr>
+<tr><td>L_MTP</td><td>Fast</td><td>47.2</td>
+</tr>
+<tr><td>L_NTP + L_MTP</td><td>Slow</td><td>52.1</td>
+</tr>
+<tr><td>L_NTP + L_MTP</td><td>Fast</td><td>49.6</td>
+</tr>
+<tr><td>L_NTP + L_MTP</td><td>Hybrid</td><td>51.6</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Slow 모드에서 공동 학습은 F1을 <strong>50.1 → 52.1 (+2.0점)</strong>로 높였다. 이 실험은 MTP 손실의 이점이 병렬 추론 속도에만 한정되지 않음을 보여준다.</p>
+<h3>다른 backbone에 적용 · Table 13</h3>
+<div class="comparison-scroll">
+<table class="comparison-table">
+<thead>
+<tr><th scope="col">Backbone</th><th scope="col">Decoding</th><th scope="col">F1</th><th scope="col">BPS</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Qwen3-VL-4B</td><td>NTP (baseline)</td><td>50.8</td><td>2.8</td>
+</tr>
+<tr><td>Qwen3-VL-4B</td><td>+ PBD (Slow)</td><td>52.2</td><td>2.8</td>
+</tr>
+<tr><td>Qwen3-VL-4B</td><td>+ PBD (Fast)</td><td>49.6</td><td>11.4</td>
+</tr>
+<tr><td>Qwen3-VL-4B</td><td>+ PBD (Hybrid)</td><td>52.0</td><td>9.4</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Table 13은 COCO만 학습한 통제 실험이다. Hybrid는 baseline 대비 F1 +1.2점, 처리량 약 3.36배다. BPS는 <strong>boxes per second</strong>이며 tokens/s가 아니다. F1은 여러 IoU 임계값에서 평균한 논문 지표이며, F1@0.5나 COCO AP로 읽으면 안 된다.</p>
+<p>표는 논문 보고값이다. 다른 데이터·backbone에서 같은 개선 폭이 나오는지는 별도로 평가해야 한다.</p>
+<p class="chart-caption">출처: <a href="https://arxiv.org/html/2605.27365v1" target="_blank" rel="noreferrer">논문 Table 6(c), Appendix C.3 / Table 13</a>.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="locate-output">
+<div class="section-head">
+<div class="section-number">06 / OUTPUT</div>
+<div>
+<h2 id="locate-output">출력 형식이 같아도 label의 의미는 task에 따라 다르다</h2>
+</div>
+</div>
+<div class="section-body">
+<div class="comparison-scroll">
+<table class="comparison-table">
+<thead>
+<tr><th scope="col">Task</th><th scope="col">개념적 출력</th><th scope="col">의미</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Object detection</td><td><code>&lt;ref&gt;dog&lt;/ref&gt;&lt;box&gt;…&lt;/box&gt;</code></td><td>이 위치에 개라는 객체가 있다.</td>
+</tr>
+<tr><td>OCR / text spotting</td><td><code>&lt;ref&gt;dog&lt;/ref&gt;&lt;box&gt;…&lt;/box&gt;</code></td><td>이 박스 안에 실제로 “dog”라는 글자가 쓰여 있다.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Query와 학습 task가 label의 의미를 결정한다. Detection의 클래스 이름과 OCR의 인식 문자열은 같은 문자열이어도 서로 다른 정답이다.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="locate-application">
+<div class="section-head">
+<div class="section-number">07 / APPLICATION</div>
+<div>
+<h2 id="locate-application">구조 학습과 출력 검증을 함께 적용한다</h2>
+</div>
+</div>
+<div class="section-body">
+<div class="comparison-scroll">
+<table class="comparison-table">
+<thead>
+<tr><th scope="col">요소</th><th scope="col">역할</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Attention mask</td><td>같은 박스 내부의 masked 위치들이 표현을 교환한다.</td>
+</tr>
+<tr><td>MTP loss</td><td>네 좌표와 구조 토큰을 같은 블록의 정답으로 함께 학습한다.</td>
+</tr>
+<tr><td>Box-aligned block</td><td>서로 다른 박스의 좌표가 하나의 블록에 섞이지 않도록 경계를 맞춘다.</td>
+</tr>
+<tr><td>Hybrid fallback</td><td>병렬 출력의 형식 오류·공간적 불확실성에 해당하는 블록을 NTP로 재생성한다.</td>
+</tr>
+<tr><td>적용 시 후처리</td><td>좌표 순서·범위·파싱 성공 여부를 명시적으로 검사한다.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<pre class="formula"><code>유효한 2D bounding box의 필수조건
+x1 &lt; x2
+y1 &lt; y2</code>
+</pre>
+<p>AR(NTP)로 생성해도 박스 형식과 기하 조건이 자동으로 보장되지는 않는다. MTP 공동 학습 역시 이 부등식을 강제로 만족시키는 수학적 제약은 아니다. 파싱 실패율과 잘못된 박스 비율을 정확도·처리량과 함께 확인해야 한다.</p>
+<p><strong>공식 Hybrid와 적용 제안을 구분한다.</strong> 논문은 형식 검사와 좌표 확률·후보 분산을 이용한 재생성을 설명한다. 공개 코드의 형식 검사만으로 <code>x1 &lt; x2</code>, <code>y1 &lt; y2</code>까지 보장된다고 쓰면 안 된다. 이 조건은 적용 파이프라인의 별도 검증 항목으로 둔다.</p>
+<p class="chart-caption">구현 참고: 논문의 불확실성 기준은 top-1 확률 0.7 미만 및 top-5 좌표 범위 80 초과다. 확인한 공개 revision의 <code>decode_bbox_avg</code>에는 0.9 / 60 기준이 활성화되어 있어 논문 설정과 구분해야 한다.</p>
+<p>적용 실험에서는 기존 NTP-only를 기준으로 공동 학습 + Slow를 먼저 비교하고, 이후 Fast·Hybrid의 속도와 정확도를 평가한다. 단순히 프롬프트에 박스 형식을 추가하는 것만으로 PBD가 구현되지는 않는다. 토큰 구성, 학습용 attention mask, 손실, 추론 루프를 함께 맞춰야 한다.</p>
+<p class="chart-caption">출처: <a href="https://huggingface.co/nvidia/LocateAnything-3B/blob/c32291ca5e996f5a7a485845b4f57a233936bba0/generate_utils.py" target="_blank" rel="noreferrer">논문 §3.3 및 공개 generate_utils.py</a>.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="locate-sources">
+<div class="section-head">
+<div class="section-number">08 / SOURCES</div>
+<div>
+<h2 id="locate-sources">확인한 1차 자료</h2>
+</div>
+</div>
+<div class="section-body">
+<ul>
+<li><a href="https://arxiv.org/html/2605.27365v1" target="_blank" rel="noreferrer">LocateAnything 논문 · arXiv:2605.27365v1</a> — §3, Table 6(c), Table 7, Table 13</li>
+<li><a href="https://github.com/NVlabs/Eagle/tree/main/Embodied" target="_blank" rel="noreferrer">NVIDIA 공식 코드 · NVlabs/Eagle/Embodied</a>
+</li>
+<li><a href="https://huggingface.co/nvidia/LocateAnything-3B/blob/c32291ca5e996f5a7a485845b4f57a233936bba0/config.json" target="_blank" rel="noreferrer">공개 모델 설정 · MoonViT-SO-400M / Qwen2.5-3B-Instruct</a>
+</li>
+<li><a href="https://huggingface.co/nvidia/LocateAnything-3B/blob/c32291ca5e996f5a7a485845b4f57a233936bba0/generate_utils.py" target="_blank" rel="noreferrer">공개 추론 구현 · 블록 검사 / 좌표 후보 처리</a>
+</li>
+</ul>
+<p class="chart-caption">조사일 2026-09-16 · 모델 코드 revision <code>c32291ca5e996f5a7a485845b4f57a233936bba0</code>
+</p>
+</div>
+</section>
+</article>

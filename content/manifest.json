@@ -1,6 +1,20 @@
 {
   "days": [
     {
+      "date": "2026-09-16",
+      "label": "2026년 09월 16일",
+      "title": "시각 grounding · 구조화 예측",
+      "pages": [
+        {
+          "id": "locate-anything",
+          "index": "01",
+          "title": "LocateAnything 공동 학습",
+          "subtitle": "NTP + MTP · Parallel Box Decoding",
+          "file": "content/2026-09-16/01-locate-anything.html"
+        }
+      ]
+    },
+    {
       "date": "2026-09-01",
       "label": "2026년 09월 01일",
       "title": "추론 시스템",
