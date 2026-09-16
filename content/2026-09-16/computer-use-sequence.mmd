@@ -30,14 +30,8 @@ sequenceDiagram
     Model-->>Exec: drag(path=오른쪽 귀)
     Exec->>Tldraw: mouse_down → mouse_move → mouse_up
 
-    Model-->>Exec: drag(path=왼쪽 눈)
-    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
-
-    Model-->>Exec: drag(path=오른쪽 눈)
-    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
-
-    Model-->>Exec: drag(path=입과 코)
-    Exec->>Tldraw: mouse_down → mouse_move → mouse_up
+    Model-->>Exec: drag(paths=눈·코·입)
+    Exec->>Tldraw: 얼굴 세부 stroke 실행
 
     Model-->>Exec: drag(path=몸통과 팔)
     Exec->>Tldraw: mouse_down → mouse_move → mouse_up
