@@ -1,0 +1,229 @@
+<article class="article">
+<header class="article-header" data-index="02">
+<div class="eyebrow">COMPUTER USE / OBSERVE · ACT · VERIFY</div>
+<h1>Computer Use 작동법 이해하기</h1>
+<p class="dek">모델이 화면을 보고 다음 행동을 정하면, 실행기가 클릭·드래그·입력을 수행한다. 바뀐 화면을 다시 확인하고 필요한 행동을 이어 간다. <strong>화면 관찰 → 판단 → 실행 → 재확인</strong>이 작업이 끝날 때까지 반복된다.</p>
+<div class="header-meta"><span class="meta-chip">UPDATED 2026-09-16</span><span class="meta-chip">Codex Computer Use · Cua MCP</span><span class="meta-chip">사용자 제공 실행 사례 + 동작 원리</span>
+</div>
+</header>
+<section class="section" aria-labelledby="cu-loop">
+<div class="section-head">
+<div class="section-number">01 / LOOP</div>
+<div>
+<h2 id="cu-loop">모델은 판단하고, 실행기는 앱을 조작한다</h2>
+</div>
+</div>
+<div class="section-body">
+<div class="visual-stage">
+<div class="flow-diagram">
+<div class="flow-node draft"><strong>화면 관찰</strong>
+<p>실행기가 현재 화면을 캡처한다.<br>모델은 사용자 요청과 화면, 사용할 수 있는 도구 정의를 함께 읽는다.</p>
+</div>
+<div class="flow-arrow" aria-hidden="true">→</div>
+<div class="flow-node verify"><strong>다음 행동 결정</strong>
+<p>버튼·캔버스 위치와 현재 상태를 파악한다.<br>클릭, 드래그, 입력 또는 코드 실행을 선택한다.</p>
+</div>
+<div class="flow-arrow" aria-hidden="true">→</div>
+<div class="flow-node commit"><strong>실행 후 재확인</strong>
+<p>실행기가 도구 호출을 실제 동작으로 옮긴다.<br>새 화면을 모델에 돌려주고 성공 여부를 판단한다.</p>
+</div>
+</div>
+</div>
+<p>예를 들어 “tldraw에서 마우스로 원숭이를 그려줘”라는 요청을 받으면, 모델은 캔버스와 Draw 도구를 찾고 머리·귀·눈·입 등으로 작업을 나눈다. 실행기는 선택된 위치를 클릭하고 각 선의 경로를 따라 마우스를 움직인다. 선이 빠졌다면 모델이 다음 캡처에서 확인해 보정한다.</p>
+<p><strong>화면 속 버튼과 호출 가능한 도구는 서로 다른 정보다.</strong> Draw 버튼은 화면이나 접근성 정보에서 찾는 앱의 요소다. <code>click</code>, <code>drag</code>, <code>screenshot</code> 같은 도구의 이름과 인자는 실행 환경이 모델에 제공한다. 화면에서 도구 API 목록을 알아내는 것은 아니다.</p>
+<p>행동은 구조화된 도구 호출로 전달할 수도 있고, 여러 호출을 묶은 스크립트로 전달할 수도 있다. 매번 전체 스크립트를 새로 만드는 것이 필수는 아니다. 짧은 행동 묶음 뒤에 화면을 확인하면 앞선 오동작에 맞춰 다음 행동을 바꿀 수 있다.</p>
+<p class="chart-caption">동작 원리: <a href="https://developers.openai.com/api/docs/guides/tools-computer-use" target="_blank" rel="noreferrer">OpenAI Computer use 가이드</a>. API의 관찰·실행 루프를 설명한 것으로, Codex 플러그인의 비공개 내부 호출을 재현한 로그는 아니다.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="cu-runtime">
+<div class="section-head">
+<div class="section-number">02 / RUNTIME</div>
+<div>
+<h2 id="cu-runtime">Codex 플러그인과 Cua MCP가 맡는 역할</h2>
+</div>
+</div>
+<div class="section-body">
+<div class="comparison-scroll">
+<table class="comparison-table">
+<thead>
+<tr><th scope="col">구분</th><th scope="col">Codex Computer Use</th><th scope="col">Cua MCP</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>연결 방식</td><td>앱에서 Computer Use 플러그인을 통해 사용</td><td>Cua의 컴퓨터 제어 기능을 MCP 서버로 연결</td>
+</tr>
+<tr><td>실행 기능</td><td>허용된 앱의 화면을 보고 GUI를 조작</td><td>연결된 환경의 화면 조회와 입력 동작 등을 도구로 제공</td>
+</tr>
+<tr><td>모델과의 관계</td><td>Codex 실행 환경이 모델과 도구를 연결</td><td>MCP를 지원하는 agent 실행 환경이 모델과 도구를 연결</td>
+</tr>
+<tr><td>공개 범위</td><td>공식 사용 문서에서 플러그인 제공 방식 확인 가능</td><td>trycua/cua 저장소에 오픈소스 구현 공개</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Codex의 Computer Use는 앱에 연결된 플러그인으로 동작한다. 공개 문서만으로 플러그인 전체의 소스 공개 여부와 내부 구현을 확정하기는 어려우므로, 여기서는 확인 가능한 사용 방식과 실행 흐름을 중심으로 설명한다.</p>
+<p>Cua는 computer-use를 위한 오픈소스 프로젝트다. Cua MCP는 모델 자체가 아니라 agent가 컴퓨터를 제어할 수 있도록 도구를 연결하는 계층이다. “아무 하네스에 연결”은 <strong>MCP 연결과 필요한 도구·이미지 처리를 지원하는 실행 환경에 연결</strong>한다는 뜻으로 이해하면 된다. OS와 드라이버 지원, 실행 권한도 맞아야 한다.</p>
+<p class="chart-caption">출처: <a href="https://learn.chatgpt.com/docs/computer-use" target="_blank" rel="noreferrer">OpenAI 공식 Computer Use 문서</a>, <a href="https://github.com/trycua/cua" target="_blank" rel="noreferrer">trycua/cua</a>, <a href="https://github.com/trycua/cua/blob/main/libs/cua-driver/README.md" target="_blank" rel="noreferrer">Cua Driver의 MCP 연결 설명</a>.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="cu-sequence">
+<div class="section-head">
+<div class="section-number">03 / SEQUENCE</div>
+<div>
+<h2 id="cu-sequence">tldraw에서 원숭이를 그리는 순서</h2>
+</div>
+</div>
+<div class="section-body">
+<p>아래는 GPT-6 Astra를 사용하는 예시 흐름이다. 실제 호출 이름과 캡처 간격은 실행 환경에 따라 달라진다. <code>drag(path)</code>는 경로를 따라 마우스를 누르고 이동한 뒤 놓는 동작을 뜻한다.</p>
+<div class="comparison-scroll">
+<table class="comparison-table">
+<thead>
+<tr><th scope="col">순서</th><th scope="col">보내는 쪽 → 받는 쪽</th><th scope="col">요청 또는 반환</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>사용자 → 모델</td><td>“tldraw에서 마우스로 원숭이를 그려줘”</td>
+</tr>
+<tr><td>2</td><td>모델 → 실행기 → tldraw</td><td>현재 화면 캡처 요청</td>
+</tr>
+<tr><td>3</td><td>실행기 → 모델</td><td>빈 캔버스와 툴바가 보이는 스크린샷 반환</td>
+</tr>
+<tr><td>4</td><td>모델 내부 판단</td><td>캔버스·Draw 도구 위치 파악, 원숭이를 여러 stroke로 분해</td>
+</tr>
+<tr><td>5</td><td>모델 → 실행기 → tldraw</td><td>click(x, y)로 Draw 도구 선택</td>
+</tr>
+<tr><td>6</td><td>모델 → 실행기 → tldraw</td><td>drag(path): 머리 윤곽 → 왼쪽 귀 → 오른쪽 귀</td>
+</tr>
+<tr><td>7</td><td>모델 → 실행기 → tldraw</td><td>drag(path): 왼쪽 눈 → 오른쪽 눈 → 입과 코</td>
+</tr>
+<tr><td>8</td><td>모델 → 실행기 → tldraw</td><td>요청한 그림에 맞춰 몸통·팔·꼬리 stroke 추가</td>
+</tr>
+<tr><td>9</td><td>실행기 → 모델</td><td>실행 후 스크린샷 반환. 필요하면 중간 단계에서도 캡처</td>
+</tr>
+<tr><td>10</td><td>모델 내부 판단</td><td>모양과 누락된 선 확인</td>
+</tr>
+<tr><td>11A</td><td>모델 → 사용자</td><td>정상적으로 완성됐으면 결과 전달</td>
+</tr>
+<tr><td>11B</td><td>모델 → 실행기 → 모델</td><td>누락된 선 보정 → 새 스크린샷 확인 → 결과 전달</td>
+</tr>
+</tbody>
+</table>
+</div>
+<pre class="formula"><code>한 stroke의 실행
+mouse_down(시작점)
+mouse_move(경로의 다음 점)  // 경로를 따라 반복
+mouse_up(끝점)
+
+다음 확인
+screenshot → 모델의 결과 판단 → 다음 stroke 또는 완료</code>
+</pre>
+<p>마우스 이동 점마다 모델이 다시 추론할 필요는 없다. 모델이 만든 하나의 경로를 실행기가 여러 이동 이벤트로 수행할 수 있다.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="cu-examples">
+<div class="section-head">
+<div class="section-number">04 / EXAMPLES</div>
+<div>
+<h2 id="cu-examples">같은 원숭이 그림도 조작 경로는 다르다</h2>
+</div>
+</div>
+<div class="section-body">
+<figure class="visual-stage"><img src="assets/research/2026-09-16-computer-use-monkeys.png" width="3016" height="1936" style="width:100%;height:auto" alt="tldraw 캔버스에서 Astra와 Qwen을 Codex Computer Use 및 Cua MCP로 사용해 그린 원숭이 다섯 개의 비교 화면" loading="lazy">
+<figcaption class="chart-caption">사용자 제공 화면 · 2026-09-16. 아래 분류는 이미지에 적힌 모델·도구·조작 방식 설명을 따른다.</figcaption>
+</figure>
+<div class="comparison-scroll">
+<table class="comparison-table">
+<thead>
+<tr><th scope="col">이미지 위치</th><th scope="col">표기된 조합</th><th scope="col">조작 방식</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>왼쪽 위</td><td>Astra / Computer Use in Codex</td><td>도형을 조합해 그림</td>
+</tr>
+<tr><td>오른쪽 위</td><td>Qwen / Cua MCP</td><td>JavaScript 코드 기반 도형 생성</td>
+</tr>
+<tr><td>왼쪽 가운데</td><td>Astra / Cua MCP</td><td>마우스만 사용해 직접 그림</td>
+</tr>
+<tr><td>오른쪽 가운데</td><td>Qwen / Cua MCP</td><td>마우스만 사용해 직접 그림</td>
+</tr>
+<tr><td>오른쪽 아래</td><td>Qwen / Computer Use in Codex</td><td>마우스만 사용해 직접 그림</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>마우스만 사용하는 경우</strong>에는 Draw 도구를 선택하고 경로를 입력한다. <strong>코드 기반 도형 생성</strong>은 연결된 코드 실행 수단이나 앱 API를 통해 도형 데이터를 만들어 넣는 방식이다. 같은 캔버스 결과라도 수행한 작업은 다르다.</p>
+<p>첨부 화면은 여러 조합의 결과 사례다. 실행 로그·소요 시간·반복 횟수가 없으므로 그림 모양만으로 특정 모델이나 플러그인의 성능 순위를 정할 수는 없다.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="cu-polygon">
+<div class="section-head">
+<div class="section-number">05 / POLYGON</div>
+<div>
+<h2 id="cu-polygon">폴리곤 라벨링에 적용하면</h2>
+</div>
+</div>
+<div class="section-body">
+<p>작은 벌레처럼 경계가 복잡한 대상을 라벨링하려면, agent가 사용할 이미지 뷰어와 폴리곤 편집 도구를 준비할 수 있다. 다음은 사용자가 언급한 작업을 바탕으로 구성한 <strong>구현 아이디어</strong>다. 특정 X 게시물의 실제 구현을 확인한 설명은 아니다.</p>
+<div class="visual-stage">
+<div class="flow-diagram">
+<div class="flow-node draft"><strong>이미지 확인 → 확대</strong>
+<p>대상을 찾고 경계가 잘 보이는 배율로 조정한다.<br>확대·이동 후 화면과 좌표 변환 정보를 다시 읽는다.</p>
+</div>
+<div class="flow-arrow" aria-hidden="true">→</div>
+<div class="flow-node verify"><strong>정점 계산 → 적용</strong>
+<p>모델이 경계를 따라 폴리곤 좌표를 구성한다.<br>마우스로 정점을 찍거나, 준비된 도구에 좌표 배열을 전달한다.</p>
+</div>
+<div class="flow-arrow" aria-hidden="true">→</div>
+<div class="flow-node commit"><strong>오버레이 확인 → 수정</strong>
+<p>이미지 위에 폴리곤을 표시한다.<br>경계 이탈·누락을 확인해 정점을 수정하고 반복한다.</p>
+</div>
+</div>
+</div>
+<div class="comparison-scroll">
+<table class="comparison-table">
+<thead>
+<tr><th scope="col">준비할 도구의 예</th><th scope="col">agent가 하는 일</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>이미지 열기 / 현재 상태 조회</td><td>이미지 크기·뷰포트·배율을 확인한다.</td>
+</tr>
+<tr><td>확대·축소 / 화면 이동</td><td>작은 경계나 가려진 부분을 자세히 본다.</td>
+</tr>
+<tr><td>폴리곤 추가 / 정점 수정 / 되돌리기</td><td>좌표 배열을 적용하거나 오동작을 수정한다.</td>
+</tr>
+<tr><td>오버레이 캡처 / 결과 저장</td><td>원본 위의 경계를 확인하고 라벨을 저장한다.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<pre class="formula"><code>// 아래 이름은 설계 예시이며 실제 Cua API가 아니다.
+view = inspect_image()
+zoom_to(target_region)
+view = inspect_image()          // 변경된 화면·배율·원점 확인
+points = model_plan_polygon(view)
+apply_polygon(points, coordinate_space="image")
+preview = capture_overlay()
+// 모델이 preview를 확인하고 수정하거나 저장한다.</code>
+</pre>
+<p><strong>확대·축소 후에는 화면 좌표와 원본 이미지 좌표를 구분해야 한다.</strong> 화면에서 찍은 점을 그대로 원본 좌표로 저장하면 배율이나 pan 위치가 바뀔 때 폴리곤이 어긋난다. 앱이 제공하는 좌표 변환을 사용하고, 최종 라벨은 원본 이미지 기준으로 저장하는 편이 명확하다.</p>
+<p>이 방식은 모델이 경계를 판단하고 도구가 편집을 수행하는 반복 작업이다. 별도의 detection·segmentation 모델을 연결하면 초기 후보를 만들 수 있지만, Computer Use나 MCP를 붙였다는 이유만으로 경계 추정 모델이 생기는 것은 아니다.</p>
+</div>
+</section>
+<section class="section" aria-labelledby="cu-takeaways">
+<div class="section-head">
+<div class="section-number">06 / TAKEAWAYS</div>
+<div>
+<h2 id="cu-takeaways">작동 방식을 이해할 때 볼 세 가지</h2>
+</div>
+</div>
+<div class="section-body">
+<ul>
+<li><strong>모델:</strong> 화면을 해석하고 다음 동작·좌표·완료 여부를 판단한다.</li>
+<li><strong>실행 환경:</strong> 사용할 도구와 상태를 모델에 전달하고 실행 결과를 돌려준다.</li>
+<li><strong>제어 도구:</strong> 마우스·키보드·스크린샷 또는 앱의 구조화된 편집 기능을 실제로 수행한다.</li>
+</ul>
+<p>잘 맞는 도구를 준비할수록 모델은 반복적인 입력보다 대상 판단과 결과 확인에 집중할 수 있다. 폴리곤 좌표를 한 번에 받는 편집 도구가 있다면, 정점마다 클릭하는 작업을 좌표 배열 전달로 줄일 수 있다.</p>
+</div>
+</section>
+</article>

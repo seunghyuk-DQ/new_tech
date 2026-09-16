@@ -14,8 +14,19 @@ const [documentHtml, styles, application, manifestSource, favicon] = await Promi
 
 const manifest = JSON.parse(manifestSource);
 const pagePaths = manifest.days.flatMap(day => day.pages.map(page => page.file));
+async function embedPageImages(path) {
+  let html = await readFile(path, "utf8");
+  const sources = new Set(Array.from(html.matchAll(/<img\b[^>]*\bsrc="(assets\/[^"]+\.(?:png|jpg|jpeg|webp))"/gu), match => match[1]));
+  for (const source of sources) {
+    const extension = source.split(".").at(-1);
+    const mime = extension === "jpg" ? "jpeg" : extension;
+    const bytes = await readFile(source);
+    html = html.replaceAll(`src="${source}"`, `src="data:image/${mime};base64,${bytes.toString("base64")}"`);
+  }
+  return html;
+}
 const pageEntries = await Promise.all(
-  pagePaths.map(async path => [path, await readFile(path, "utf8")]),
+  pagePaths.map(async path => [path, await embedPageImages(path)]),
 );
 const embeddedContent = JSON.stringify({
   manifest,
