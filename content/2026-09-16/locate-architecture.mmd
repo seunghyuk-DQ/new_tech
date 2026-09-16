@@ -1,0 +1,22 @@
+flowchart TB
+    A["입력 이미지"] --> B["MoonViT-SO-400M<br/>비전 인코더<br/>약 0.4B 파라미터"]
+    B --> C["시각 토큰<br/>Visual Tokens"]
+    C --> D["MLP Projector<br/>MoonViT 특징을<br/>Qwen 입력 차원으로 변환"]
+    Q["사용자 Query<br/>예: '강아지를 찾아줘'"] --> E["Qwen2.5-3B-Instruct<br/>언어 디코더"]
+    D --> E
+    E --> G["PBD<br/>Parallel Box Decoding<br/>출력 토큰을 생성하는 방식"]
+    G --> F["구조화된 출력 토큰<br/>&lt;ref&gt; dog &lt;/ref&gt;<br/>&lt;box&gt; x₁ y₁ x₂ y₂ &lt;/box&gt;"]
+    F --> H["Bounding Box<br/>네 좌표 + 구조 토큰 2개<br/>길이 6의 box 블록"]
+    G -.-> I["Fast Mode<br/>MTP: 블록 토큰을 동시에 예측"]
+    G -.-> J["Slow Mode<br/>NTP: 토큰을 순서대로 예측"]
+    G -.-> K["Hybrid Mode<br/>Fast 시도 후 불안정한 블록을<br/>Slow로 재생성"]
+    classDef vision fill:#dceeff,stroke:#4a90d9,stroke-width:2px,color:#111;
+    classDef language fill:#fff0d2,stroke:#e6a21a,stroke-width:2px,color:#111;
+    classDef output fill:#e4f5df,stroke:#58a65c,stroke-width:2px,color:#111;
+    classDef decoding fill:#f3e1ff,stroke:#9855c7,stroke-width:2px,color:#111;
+    classDef query fill:#eeeeee,stroke:#888888,stroke-width:1px,color:#111;
+    class A,B,C vision;
+    class Q query;
+    class D,E language;
+    class F output;
+    class G,H,I,J,K decoding;

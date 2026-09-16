@@ -1,0 +1,13 @@
+flowchart LR
+    GT["같은 정답<br/>class + box + 좌표"] --> NTP["NTP 표현<br/>이전 토큰을 하나씩 입력"]
+    GT --> MTP["MTP 표현<br/>anchor + [mask] block"]
+    C["이미지 + query<br/>공유 context"] --> F["한 번의 Transformer forward<br/>custom attention mask"]
+    NTP --> F
+    MTP --> F
+    F --> LN["NTP logits"]
+    F --> LM["MTP logits"]
+    LN --> CN["NTP Cross-Entropy"]
+    LM --> CM["MTP Cross-Entropy"]
+    CN --> SUM["L = L_NTP + λ · L_MTP"]
+    CM --> SUM
+    SUM --> BP["공유된 MoonViT / projector / Qwen에 backprop"]
