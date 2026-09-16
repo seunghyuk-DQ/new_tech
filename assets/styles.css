@@ -203,6 +203,7 @@ img, svg { display: block; max-width: 100%; }
 .menu-button, .sidebar-close { display: none; }
 
 .article-root { min-height: calc(100vh - var(--topbar-height)); view-transition-name: article; }
+.article-root:focus { outline: none; }
 .article { max-width: 1120px; margin: 0 auto; padding: 68px 54px 110px; }
 .article-header { position: relative; padding: 0 0 36px; border-bottom: 1px solid var(--line); }
 .article-header::after {
