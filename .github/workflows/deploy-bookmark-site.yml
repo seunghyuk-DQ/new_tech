@@ -39,6 +39,12 @@ jobs:
           test -n "$BOOKMARK_SITE_ID"
           test -n "$BOOKMARK_ENTRY_PATH"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
       - name: Build sandbox-compatible HTML bundle
         shell: bash
         run: node scripts/build-bookmark-site.mjs output/bookmark-site
