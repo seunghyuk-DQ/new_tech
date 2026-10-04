@@ -55,6 +55,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import "./styles.css";
+import "./quant-motion.css";
 
 const pages = manifest.days.flatMap((day) =>
   day.pages.map((page) => ({ ...page, date: day.date, dateLabel: day.label })),
@@ -82,7 +83,7 @@ const ArticleBody = memo(function ArticleBody({ html, onReady }) {
   useLayoutEffect(() => {
     // These HTML fragments are repository-owned research documents, never user input.
     ref.current.innerHTML = html;
-    initArticleInteractions(ref.current);
+    const dispose = initArticleInteractions(ref.current);
     ref.current.querySelectorAll("img").forEach((image) => {
       image.loading = "lazy";
       image.decoding = "async";
@@ -99,6 +100,7 @@ const ArticleBody = memo(function ArticleBody({ html, onReady }) {
         Math.round(ref.current.textContent.replace(/\s+/g, " ").length / 430),
       ),
     });
+    return dispose;
   }, [html, onReady]);
   return <div ref={ref} />;
 });
@@ -497,7 +499,10 @@ function App() {
         title="노트 검색"
         description="제목, 기술 이름 또는 날짜로 노트를 찾습니다."
       >
-        <CommandInput aria-label="노트 검색" placeholder="제목, 기술 이름, 날짜 검색…" />
+        <CommandInput
+          aria-label="노트 검색"
+          placeholder="제목, 기술 이름, 날짜 검색…"
+        />
         <CommandList>
           <CommandEmpty>일치하는 노트가 없습니다.</CommandEmpty>
           {manifest.days.map((day) => (
