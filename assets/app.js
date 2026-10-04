@@ -364,6 +364,8 @@
     draw();
   }
 
+  let disposeQuantStudy = () => {};
+
   function initQuantStudy(container) {
     const study = container.querySelector('[data-quant-study]');
     if (!study) return;
@@ -413,8 +415,8 @@
     }).join(' ');
     find('[data-q-distribution]').innerHTML = `<path d="${distribution} L640,175 L40,175 Z" fill="${blue}" opacity=".1"/>` + line(40, 175, 640, 175);
     find('[data-q-level-ticks]').innerHTML = iqLevels.map(() => line(40, 40, 40, 185, yellow, 'class="q-tick" stroke-width="2"')).join('');
-    function drawLevels(mode) {
-      const levels = mode === 'iq' ? iqLevels : Array.from({ length: 16 }, (_, i) => -127 + i * 16);
+    function drawLevels(mode, blend = mode === 'iq' ? 1 : 0) {
+      const levels = iqLevels.map((value, i) => (-127 + i * 16) * (1 - blend) + value * blend);
       all('[data-q-level-ticks] line').forEach((tick, i) => { tick.setAttribute('x1', levelX(levels[i])); tick.setAttribute('x2', levelX(levels[i])); });
       all('[data-q-levels]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.qLevels === mode)));
       find('[data-q-level-result]').textContent = mode === 'iq' ? 'IQ4_NL: 가운데 눈금 간격은 좁고, 바깥쪽은 넓다. 번호의 개수는 여전히 16개다.' : '균일 격자: 어디서나 간격이 16이다. 값이 드문 양 끝에도 같은 간격으로 눈금을 둔다.';
@@ -425,8 +427,8 @@
     const book = [[.15, .2], [.2, .8], [.75, .25], [.8, .85]];
     const vectors = [[.2, .7], [.8, .8], [.7, .2]];
     const vx = x => 40 + x * 250, vy = y => 240 - y * 210;
-    function drawBook() {
-      const vector = vectors[Number(find('#q-vector').value)];
+    function drawBook(override) {
+      const vector = Array.isArray(override) ? override : vectors[Number(find('#q-vector').value)];
       const distances = book.map(v => v.reduce((s, x, j) => s + (x - vector[j]) ** 2, 0));
       const index = distances.indexOf(Math.min(...distances));
       const address = index.toString(2).padStart(2, '0');
@@ -460,10 +462,169 @@
     }
     find('#q-mix-ratio').addEventListener('input', drawMix);
     drawMix();
+    const boards = all('.q-board');
+    const sections = boards.map(board => board.closest('section'));
+    const duration = 14000;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const captions = [
+      ['가중치가 움직일 수 있는 자리는 연속적이다.', '2비트로 남길 수 있는 자리는 네 개. 가까운 곳으로 옮겨 보자.', '눈금을 늘리면 같은 값도 더 가깝게 복원할 수 있다.', '4비트, 16개의 자리. 원래 점과의 차이가 양자화 오차다.'],
+      ['가중치 256개를 함께 바라보자.', '32개씩 묶어 여덟 개의 작은 블록을 만든다.', '각 블록의 배율 정보도 저장해야 한다.', '모든 저장 비용을 더하면 가중치 하나당 4.5비트다.'],
+      ['같은 간격으로 놓인 열여섯 개의 눈금.', '가중치가 0 근처에 몰려 있다면?', '눈금을 가운데로 더 모은다. 바깥쪽의 간격은 넓어진다.', '번호는 여전히 16개. 번호가 가리키는 값이 달라졌다.'],
+      ['파란 점은 숫자 두 개로 이루어진 하나의 벡터다.', '네 대표 벡터 중 가장 가까운 점의 주소를 저장한다.', '입력 벡터가 움직이면 선택하는 주소도 바뀐다.', '코드북을 함께 알고 있다면, 주소로 벡터를 복원할 수 있다.'],
+      ['평범한 거리로 재면 A가 원본에 더 가깝다.', '가로 방향 오차의 비용을 높여 보자.', '3배에서 동률. 더 높이면 선택이 B로 바뀐다.', '가까움의 기준이 달라졌다. 이것이 중요도를 넣는 직관이다.'],
+      ['모든 구역이 Q4_K라면 평균은 4.5 bpw다.', '일부 가중치에 더 높은 정밀도를 배정한다.', '20%를 Q6_K로 바꾸면 평균이 올라간다.', '기본 타입의 숫자와 모델 전체 평균 비트 수는 다르다.']
+    ];
+    const equations = [
+      ['w ∈ ℝ', '2² = <em>4</em>개의 자리', '2³ = <em>8</em>개의 자리', '2⁴ = <em>16</em>개의 자리'],
+      ['<span>256</span> weights', '<span>8</span> × <em>32</em>', '1024 + <em>96</em> + <b>32</b> bits', '1152 ÷ 256 = <em>4.5 bpw</em>'],
+      ['q ∈ {0, 1, …, 15}', '눈금의 위치도 선택이다', 'q → <em>codebook[q]</em>', '같은 4비트, <em>다른 대표값</em>'],
+      ['w = <span>(w₁, w₂)</span>', 'w → <em>가까운 대표 벡터</em>', '대표 벡터 → <em>2비트 주소</em>', '8차원 IQ2_XXS: <em>주소 + 부호 + 배율</em>'],
+      ['e₁² + e₂²', '<b>I₁</b> e₁² + e₂²', '<b>I₁ = 3</b> → A = B', '<b>I₁ = 16</b> → <em>B 선택</em>'],
+      ['1.0 × <span>4.5</span>', '(1 − p) × <span>4.5</span> + p × <b>6.5625</b>', '0.8 × <span>4.5</span> + 0.2 × <b>6.5625</b>', '<em>4.9125 bpw</em>']
+    ];
+    let active = -1, frame = 0, startedAt = 0;
+    const progress = boards.map(() => 0);
+    const lastStep = boards.map(() => -1);
+    const clamp = v => Math.max(0, Math.min(1, v));
+    const smooth = v => { const t = clamp(v); return t * t * (3 - 2 * t); };
+    const manualLabels = ['반올림 직접 조작', '블록을 눌러 자세히 보기', '눈금 직접 비교', '다른 벡터 선택', '중요도 직접 조절', '혼합 비율 직접 조절'];
+    boards.forEach((board, index) => {
+      const controls = board.querySelector('.q-controls');
+      if (controls) {
+        const manual = document.createElement('details');
+        manual.className = 'q-manual';
+        const summary = document.createElement('summary');
+        summary.textContent = manualLabels[index];
+        manual.append(summary, controls);
+        board.append(manual);
+      }
+      const player = document.createElement('div');
+      player.className = 'q-player';
+      player.innerHTML = `<div class="q-player-heading"><span>SCENE ${String(index + 1).padStart(2, '0')}</span><span data-q-state>READY TO PLAY</span></div><div class="q-narration" data-q-narration aria-live="polite"></div><div class="q-player-controls"><button type="button" data-q-play aria-label="장면 ${index + 1} 재생">▶ <span>재생</span></button><button type="button" data-q-reset aria-label="장면 ${index + 1} 처음으로">↺</button><input type="range" min="0" max="1000" value="0" data-q-timeline aria-label="장면 ${index + 1} 재생 위치"><output data-q-time>0:00 / 0:14</output></div>`;
+      board.setAttribute('aria-live', 'off');
+      board.querySelectorAll('[aria-live]').forEach(node => node.setAttribute('aria-live', 'off'));
+      board.prepend(player);
+      const equation = document.createElement('div');
+      equation.className = 'q-story-equation';
+      equation.innerHTML = equations[index][0];
+      player.after(equation);
+      board.querySelector('[data-q-play]').addEventListener('click', () => {
+        if (reduceMotion.matches) { pause(); renderScene(index, progress[index] >= 1 ? 0 : Math.min(1, progress[index] + .26)); return; }
+        if (active === index) { pause(); return; }
+        play(index);
+      });
+      board.querySelector('[data-q-reset]').addEventListener('click', () => { pause(); renderScene(index, 0); });
+      board.querySelector('[data-q-timeline]').addEventListener('input', event => { pause(); renderScene(index, Number(event.target.value) / 1000); });
+      board.querySelectorAll('.q-manual, .q-block-grid').forEach(control => {
+        ['pointerdown', 'keydown'].forEach(type => control.addEventListener(type, () => {
+          pause();
+          board.classList.add('is-exploring');
+          board.querySelector('[data-q-state]').textContent = 'EXPLORE';
+          board.querySelector('[data-q-narration]').textContent = '직접 값을 바꾸면서 그림과 계산 결과를 비교해 보자.';
+          board.querySelectorAll('.q-dots i').forEach(dot => dot.style.transform = '');
+        }));
+      });
+    });
+    function pause() {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      if (active >= 0) {
+        const board = boards[active];
+        board.classList.remove('is-playing');
+        board.querySelector('[data-q-state]').textContent = progress[active] >= 1 ? 'COMPLETE' : 'PAUSED';
+      }
+      active = -1;
+      updatePlayButtons();
+    }
+    function updatePlayButtons() {
+      boards.forEach((board, i) => {
+        const button = board.querySelector('[data-q-play]');
+        const text = reduceMotion.matches ? '다음 단계' : active === i ? '일시정지' : progress[i] >= 1 ? '다시 재생' : '재생';
+        button.innerHTML = `${active === i ? 'Ⅱ' : '▶'} <span>${text}</span>`;
+        button.setAttribute('aria-label', `장면 ${i + 1} ${text}`);
+      });
+    }
+    function renderScene(index, t) {
+      progress[index] = t;
+      const board = boards[index], step = Math.min(3, Math.floor(t * 4));
+      if (board.classList.contains('is-exploring')) lastStep[index] = -1;
+      board.classList.remove('is-exploring');
+      board.dataset.stage = step;
+      board.querySelector('[data-q-timeline]').value = Math.round(t * 1000);
+      board.querySelector('[data-q-time]').textContent = `0:${String(Math.floor(t * 14)).padStart(2, '0')} / 0:14`;
+      if (lastStep[index] !== step) {
+        board.querySelector('[data-q-narration]').textContent = captions[index][step];
+        board.querySelector('.q-story-equation').innerHTML = equations[index][step];
+        lastStep[index] = step;
+      }
+      if (index === 0) {
+        const bits = t < .48 ? 2 : t < .72 ? 3 : 4;
+        const nextSnapped = t >= .22;
+        if (Number(find('#q-bits').value) !== bits || snapped !== nextSnapped) {
+          find('#q-bits').value = bits; snapped = nextSnapped; drawRound();
+        }
+      } else if (index === 1) {
+        const grouped = smooth(t / .25);
+        all('[data-q-block] .q-dots i').forEach((dot, i) => {
+          dot.style.transform = `translate(${(1 - grouped) * ((i * 37 % 61) - 30)}px, ${(1 - grouped) * ((i * 13 % 51) - 25)}px)`;
+        });
+        chooseBlock(Math.min(7, Math.floor(clamp((t - .2) / .45) * 8)));
+        board.querySelector('.q-budget').style.opacity = .15 + .85 * smooth((t - .5) / .25);
+      } else if (index === 2) {
+        drawLevels(t >= .5 ? 'iq' : 'uniform', smooth((t - .25) / .4));
+      } else if (index === 3) {
+        const blend = smooth((t - .3) / .4);
+        drawBook([.2 + blend * .6, .7 + blend * .1]);
+        find('#q-vector').value = blend >= .5 ? '1' : '0';
+      } else if (index === 4) {
+        const alpha = t < .5 ? 1 + 2 * smooth((t - .2) / .2) : 3 + 13 * smooth((t - .56) / .25);
+        find('#q-importance').value = alpha.toFixed(2); drawMetric();
+        board.querySelector('.q-story-equation').innerHTML = `<b>I₁ = ${Number(find('#q-importance').value)}</b> → <em>${find('[data-q-winner]').textContent}</em>`;
+      } else {
+        find('#q-mix-ratio').value = Math.round(20 * smooth((t - .2) / .4) / 5) * 5; drawMix();
+      }
+    }
+    function play(index) {
+      pause();
+      if (progress[index] >= 1) progress[index] = 0;
+      active = index;
+      boards[index].classList.add('is-playing');
+      boards[index].querySelector('[data-q-state]').textContent = 'PLAYING';
+      startedAt = performance.now() - progress[index] * duration;
+      updatePlayButtons();
+      function tick(now) {
+        if (!study.isConnected || active !== index) { pause(); return; }
+        const t = Math.min(1, (now - startedAt) / duration);
+        renderScene(index, t);
+        if (t >= 1) pause(); else frame = requestAnimationFrame(tick);
+      }
+      frame = requestAnimationFrame(tick);
+    }
+    function visit(index, autoplay = false) {
+      pause();
+      sections[index].scrollIntoView({ behavior: reduceMotion.matches ? 'instant' : 'smooth', block: 'start' });
+      all('[data-q-chapter]').forEach((button, i) => button.setAttribute('aria-current', i === index ? 'step' : 'false'));
+      if (autoplay && !reduceMotion.matches) play(index);
+      else boards[index].querySelector('[data-q-play]').focus({ preventScroll: true });
+    }
+    all('[data-q-chapter]').forEach(button => button.addEventListener('click', () => visit(Number(button.dataset.qChapter))));
+    find('[data-q-start]').addEventListener('click', () => visit(0, true));
+    function handleVisibility() { if (document.hidden) pause(); }
+    function handleMotionPreference() { pause(); }
+    document.addEventListener('visibilitychange', handleVisibility);
+    reduceMotion.addEventListener('change', handleMotionPreference);
+    boards.forEach((_, i) => renderScene(i, 0));
+    updatePlayButtons();
+    return () => {
+      pause();
+      document.removeEventListener('visibilitychange', handleVisibility);
+      reduceMotion.removeEventListener('change', handleMotionPreference);
+    };
   }
 
   function initArticle(page) {
-    initQuantStudy(root);
+    disposeQuantStudy();
+    disposeQuantStudy = initQuantStudy(root) || (() => {});
     updateMemorySimulator(root);
     updateCacheCalculator(root);
     updateSsdOffloadCalculator(root);

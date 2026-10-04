@@ -1,11 +1,14 @@
 <article class="article quant-study" data-quant-study>
   <header class="article-header" data-index="01">
-    <div class="eyebrow">QUANTIZATION / A VISUAL STUDY</div>
-    <h1>같은 4비트, 다른 양자화</h1>
-    <p class="dek">숫자를 담을 자리가 부족하다면, 어떤 숫자를 남겨야 할까? 점을 움직이고 거리를 재면서 <strong>K-quants, I-quants, importance matrix</strong>를 연결해 본다.</p>
-    <div class="header-meta"><span class="meta-chip">2026-10-04</span><span class="meta-chip">6개의 시각 실험</span><span class="meta-chip">개념 실험 · 모델 성능 실측 아님</span></div>
+    <div class="eyebrow">THE GEOMETRY OF QUANTIZATION</div>
+    <div class="q-hero-layout">
+      <div class="q-hero-copy"><h1><span>같은 <em>4비트.</em></span><span>다른 양자화.</span></h1><p class="dek">모든 오차가<br class="q-hero-break"> 똑같이 중요할까?</p><p class="q-hero-description">점의 이동에서 시작해, 눈금과 벡터를 거쳐<br>중요도를 담은 타원까지. 양자화를 눈으로 따라간다.</p><button type="button" class="q-start" data-q-start><span aria-hidden="true">▶</span> 첫 장면 재생 <span class="q-start-time">01 / 06</span></button></div>
+      <figure class="q-hero-art" aria-label="중요도가 달라지면 원이 타원으로 변하고 가까운 후보가 바뀐다"><svg viewBox="0 0 480 440" role="img" aria-labelledby="q-hero-title"><title id="q-hero-title">같은 오차를 재는 원이 타원이 되는 모습</title><defs><pattern id="q-hero-grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#263442" stroke-width=".6"/></pattern><radialGradient id="q-hero-glow"><stop stop-color="#67b7ca" stop-opacity=".1"/><stop offset="1" stop-color="#67b7ca" stop-opacity="0"/></radialGradient></defs><rect width="480" height="440" fill="url(#q-hero-grid)"/><circle cx="245" cy="210" r="210" fill="url(#q-hero-glow)"/><path d="M35 330H455M125 395V30" stroke="#697b8b" stroke-width="1"/><text x="439" y="355">w₁</text><text x="96" y="37">w₂</text><g class="q-hero-contours" transform="translate(245 210)"><circle r="62"/><circle r="102"/><circle r="142"/></g><path class="q-hero-error" d="M245 210L278 305" stroke="#ffe18b" stroke-width="2" stroke-dasharray="5 6"/><circle cx="245" cy="210" r="7" fill="#71c9ff"/><circle class="q-hero-a" cx="155" cy="180" r="7" fill="#ffe18b"/><circle class="q-hero-b" cx="278" cy="305" r="7" fill="#5c6c80"/><text x="264" y="200" class="q-hero-original">w</text><text x="134" y="165">A</text><text x="295" y="314">B</text><text x="195" y="413" class="q-hero-formula">Σ Iⱼ (ŵⱼ − wⱼ)²</text></svg><figcaption>오차에 중요도를 더하면, 거리의 모양이 바뀐다.</figcaption></figure>
+    </div>
+    <div class="header-meta"><span class="meta-chip">VISUAL LESSON 01</span><span class="meta-chip">6개 장면 · 재생 + 직접 조작</span><span class="meta-chip">2026.10.04</span></div>
     <p class="q-source">읽기 자료: <a href="https://wikidocs.net/430183" target="_blank" rel="noreferrer">위키독스 03-3. K-quants와 I-quants, 그리고 importance matrix</a>. 아래 그림과 예제는 원리를 설명하기 위해 새로 구성했다.</p>
   </header>
+  <nav class="q-chapters" aria-label="양자화 학습 장면"><button type="button" data-q-chapter="0"><span>01</span> 반올림</button><button type="button" data-q-chapter="1"><span>02</span> 블록</button><button type="button" data-q-chapter="2"><span>03</span> 눈금</button><button type="button" data-q-chapter="3"><span>04</span> 코드북</button><button type="button" data-q-chapter="4"><span>05</span> 중요도</button><button type="button" data-q-chapter="5"><span>06</span> 혼합</button></nav>
 
   <section class="section" aria-labelledby="q-intuition">
     <div class="section-head"><div class="section-number">01 / ROUND</div><div><h2 id="q-intuition">연속적인 값을 몇 개의 자리로 옮긴다</h2><p class="section-intro">파란 점은 원래 가중치다. 노란 눈금은 저장할 수 있는 값이다.</p></div></div>
@@ -70,7 +73,7 @@
     <div class="section-head"><div class="section-number">05 / WEIGH</div><div><h2 id="q-importance-concept">어떤 방향의 오차가 더 비쌀까?</h2><p class="section-intro">가중치가 조금 달라져도 입력이 그 차이를 크게 증폭할 수 있다.</p></div></div>
     <div class="section-body">
       <div class="q-board">
-        <div class="q-controls"><label for="q-importance">첫 번째 방향의 중요도 <output id="q-importance-value">1</output>배</label><input id="q-importance" type="range" min="1" max="20" step="1" value="1"></div>
+        <div class="q-controls"><label for="q-importance">첫 번째 방향의 중요도 <output id="q-importance-value">1</output>배</label><input id="q-importance" type="range" min="1" max="20" step="0.01" value="1"></div>
         <div class="q-split"><svg viewBox="0 0 340 300" role="img" aria-labelledby="q-importance-title"><title id="q-importance-title">가중 거리가 원에서 타원으로 바뀌며 최적 후보가 A에서 B로 바뀌는 그림</title><g data-q-metric></g></svg><div><div class="q-big" data-q-winner>A</div><div class="q-costs" data-q-costs aria-live="polite"></div><p class="q-caption">파란 점: 원본 (0.35, 0.85)<br>A = (0.20, 0.90), B = (0.40, 0.60)<br>두 후보의 저장 비용은 같다고 가정한다.</p></div></div>
         <p class="q-readout" data-q-metric-result></p>
       </div>

@@ -39,16 +39,16 @@ const bundledHtml = documentHtml
   .replace(/\s*<link rel="preconnect"[^>]*>\s*/gu, "\n")
   .replace(/\s*<link href="https:\/\/fonts\.googleapis\.com[^>]*>\s*/u, "\n")
   .replace(
-    /<link rel="stylesheet" href="assets\/styles\.css">/u,
+    /<link rel="stylesheet" href="assets\/styles\.css(?:\?[^"<>]*)?">/u,
     `  <style>\n${styles}\n  </style>`,
   )
   .replace(
-    /<script src="assets\/app\.js" defer><\/script>/u,
+    /<script src="assets\/app\.js(?:\?[^"<>]*)?" defer><\/script>/u,
     `  <script>window.__NEW_TECH_CONTENT__ = ${embeddedContent};</script>`,
   )
   .replace("</body>", `  <script>\n${application}\n  </script>\n</body>`);
 
-if (bundledHtml.includes('href="assets/styles.css"') || bundledHtml.includes('src="assets/app.js"')) {
+if (/\b(?:href|src)="assets\/(?:styles\.css|app\.js)(?:\?[^"<>]*)?"/u.test(bundledHtml)) {
   throw new Error("bookmark bundle still contains external application assets");
 }
 
