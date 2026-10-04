@@ -5,15 +5,26 @@
 - 진입 페이지: `new_tech.html`
 - 날짜별 목차: `content/manifest.json`
 - 개념별 본문: `content/YYYY-MM-DD/*.html`
-- 공통 표현/상호작용: `assets/`
+- 화면: React + shadcn/ui (`src/main.jsx`, `src/components/ui/`)
+- 본문 표현/상호작용: `src/article.css`, `src/article-interactions.js`
+- 이미지: `assets/research/`
 
 ## 로컬 실행
 
 ```bash
-uv run --no-project python -m http.server 8000 --bind 0.0.0.0
+npm ci
+npm run dev -- --port 8000
 ```
 
-브라우저에서 `http://localhost:8000/new_tech.html`을 엽니다. 정적 호스팅에서는 루트 `index.html`이 `new_tech.html`로 연결됩니다.
+브라우저에서 `http://localhost:8000/new_tech.html`을 엽니다. 루트 `index.html`도 같은 화면을 제공합니다. Node.js 22.12 이상을 사용합니다.
+
+`npm run build`는 정적 호스팅용 `dist/`를 만듭니다. 서버에는 저장소 원본 대신 `dist/`의 내용을 배포합니다. `npm run preview -- --port 8000`으로 빌드 결과를 확인할 수 있습니다.
+
+GitHub Pages는 `.github/workflows/deploy-pages.yml`에서 `dist/`를 배포합니다. 이 변경을 처음 배포하기 전에 저장소 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 변경해야 합니다. 기존 `main` 루트 직접 배포 방식은 React 소스를 빌드하지 않습니다.
+
+`npm run build:bookmark`는 이미지, 문서, UI를 포함한 독립 실행 HTML을 `output/bookmark-site/new_tech.html`에 만듭니다. 북마크 서비스의 sandbox에서도 외부 스크립트 요청 없이 실행됩니다.
+
+UI는 [shadcn/ui의 Vite 구성](https://ui.shadcn.com/docs/installation/vite)을 사용합니다. `npx shadcn@latest add <component>`로 컴포넌트를 추가할 수 있습니다. 검색은 제목·부제·날짜를 대상으로 하며 `Ctrl/⌘ K`로 열 수 있습니다. 기존 `#페이지-id` 링크를 유지하고, 문서 내 목차 링크는 `#페이지-id/섹션-id`를 사용합니다.
 
 ## 북마크 HTML CD
 

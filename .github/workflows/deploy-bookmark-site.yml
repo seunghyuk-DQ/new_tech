@@ -45,6 +45,9 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
+      - name: Install UI dependencies
+        run: npm ci
+
       - name: Build sandbox-compatible HTML bundle
         shell: bash
         run: node scripts/build-bookmark-site.mjs output/bookmark-site
