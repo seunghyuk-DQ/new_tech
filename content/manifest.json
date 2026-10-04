@@ -1,6 +1,20 @@
 {
   "days": [
     {
+      "date": "2026-10-04",
+      "label": "2026년 10월 04일",
+      "title": "양자화를 그림으로 이해하기",
+      "pages": [
+        {
+          "id": "quantization-geometry",
+          "index": "01",
+          "title": "같은 4비트, 다른 양자화",
+          "subtitle": "K-quants · I-quants · imatrix",
+          "file": "content/2026-10-04/01-quantization-geometry.html"
+        }
+      ]
+    },
+    {
       "date": "2026-09-16",
       "label": "2026년 09월 16일",
       "title": "시각 grounding · Computer Use",

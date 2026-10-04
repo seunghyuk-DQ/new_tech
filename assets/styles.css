@@ -499,3 +499,66 @@ input[type="range"] { accent-color: var(--green); }
 .article h3 small { display: inline; font-size: inherit; }
 .article :has(> h1, > h2, > h3) { min-width: 0; }
 .article .method-top > div { flex: 1; }
+
+/* Quantization study: diagrams keep a fixed palette in both site themes. */
+.quant-study .q-source { margin-top: 24px; color: var(--muted); font-size: 13px; }
+.quant-study .q-board { --q-blue: #71c9ff; --q-yellow: #ffe18b; --q-purple: #c3a5ff; background: #101722; color: #e9f1fc; border: 1px solid #2b3a4e; border-radius: 18px; padding: 24px; margin: 24px 0; overflow: hidden; }
+.quant-study .q-board p { color: #b9c9db; }
+.quant-study .q-board strong { color: inherit; }
+.quant-study .q-blue { color: #71c9ff; }
+.quant-study .q-yellow { color: #ffe18b; }
+.quant-study .q-purple { color: #c3a5ff; }
+.quant-study .q-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 18px; font-size: 14px; }
+.quant-study .q-controls label { flex: 1 1 220px; }
+.quant-study .q-controls input { width: 100%; accent-color: #ffe18b; cursor: pointer; }
+.quant-study .q-controls output { color: #ffe18b; font-weight: 700; font-variant-numeric: tabular-nums; }
+.quant-study .q-controls button, .quant-study .q-controls select { border: 1px solid #62758c; border-radius: 8px; background: #1b293c; color: #e9f1fc; padding: 10px 14px; cursor: pointer; min-height: 44px; font: inherit; max-width: 100%; }
+.quant-study .q-controls button[aria-pressed="true"] { color: #101722; background: #ffe18b; border-color: #ffe18b; }
+.quant-study :is(button,input,select,summary):focus-visible { outline: 3px solid #519dec; outline-offset: 4px; }
+.quant-study .q-board svg { width: 100%; height: auto; overflow: visible; }
+.quant-study .q-board svg text { fill: #b9c9db; font-size: 18px; font-family: var(--font-sans); }
+.quant-study .q-board .q-plot text { font-size: 22px; }
+.quant-study .q-point { transition: cx 650ms ease, cy 650ms ease, fill 400ms ease; }
+.quant-study .q-tick { transition: x1 650ms ease, x2 650ms ease; }
+.quant-study .q-readout { font-size: 15px; min-height: 3.3em; line-height: 1.65; margin: 10px 0; }
+.quant-study .q-caption { font-size: 12px; line-height: 1.7; margin: 14px 0 0; }
+.quant-study .q-equation { border-radius: 10px; background: #101722; color: #e9f1fc; padding: 20px; text-align: center; line-height: 1.9; font-size: 16px; margin: 24px 0; overflow-wrap: anywhere; }
+.quant-study .q-board .q-equation { padding: 12px 0 0; margin-bottom: 0; border-top: 1px solid #334359; }
+.quant-study .q-board-top { display: flex; gap: 12px; justify-content: space-between; font-size: 13px; margin-bottom: 20px; }
+.quant-study .q-block-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+.quant-study .q-block { border: 1px solid #62758c; border-radius: 8px; padding: 10px; background: #182438; color: #b9c9db; cursor: pointer; font-size: 12px; }
+.quant-study .q-block[aria-pressed="true"] { border-color: #ffe18b; color: #ffe18b; background: #343024; }
+.quant-study .q-dots { display: grid; grid-template-columns: repeat(8,1fr); gap: 3px; margin: 10px 0 0; }
+.quant-study .q-dots i { width: 100%; aspect-ratio: 1; border-radius: 50%; background: #71c9ff; opacity: .7; }
+.quant-study .q-block[aria-pressed="true"] i { background: #ffe18b; opacity: 1; }
+.quant-study .q-budget { display: flex; height: 42px; color: #101722; font: 12px var(--font-mono); margin: 20px 0; }
+.quant-study .q-budget span { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.quant-study .q-budget-weights { flex: 1024; background: #71c9ff; }
+.quant-study .q-budget-local { flex: 96; background: #ffe18b; }
+.quant-study .q-budget-global { flex: 32; background: #c3a5ff; }
+.quant-study .q-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12px; }
+.quant-study .q-split { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: center; }
+.quant-study .q-big { color: #ffe18b; font: 64px var(--font-mono); line-height: 1.2; margin-bottom: 15px; }
+.quant-study .q-costs { font-size: 14px; font-variant-numeric: tabular-nums; line-height: 2; }
+.quant-study .q-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 24px 0; font-size: 13px; }
+.quant-study .q-flow span:not([aria-hidden]) { padding: 12px 16px; border: 1px solid var(--line-strong); border-radius: 8px; }
+.quant-study .q-mix-cells { display: grid; grid-template-columns: repeat(10,minmax(0,1fr)); gap: 5px; margin: 24px 0; }
+.quant-study .q-mix-cells span { height: 34px; background: #71c9ff; border-radius: 3px; transition: background-color 400ms ease; }
+.quant-study .q-mix-cells span.is-high { background: #c3a5ff; }
+.quant-study .q-details { border-bottom: 1px solid var(--line-strong); padding: 18px 0; }
+.quant-study .q-details summary { cursor: pointer; font-weight: 600; }
+.quant-study .q-takeaway { border-left: 3px solid var(--blue); padding: 4px 0 4px 22px; margin: 32px 0; }
+.quant-study .q-references { font-size: 13px; color: var(--muted); }
+.quant-study .q-references li { margin: 10px 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .quant-study .q-board { padding: 18px 14px; border-radius: 12px; }
+  .quant-study .q-split { grid-template-columns: 1fr; gap: 10px; }
+  .quant-study .q-split svg { max-width: 340px; margin: auto; }
+  .quant-study .q-split .q-big { font-size: 40px; }
+  .quant-study .q-block-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .quant-study .q-equation { font-size: 14px; padding: 16px 12px; }
+  .quant-study .q-budget { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quant-study .q-point, .quant-study .q-tick, .quant-study .q-mix-cells span { transition: none; }
+}

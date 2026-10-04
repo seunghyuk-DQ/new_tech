@@ -1,0 +1,105 @@
+<article class="article quant-study" data-quant-study>
+  <header class="article-header" data-index="01">
+    <div class="eyebrow">QUANTIZATION / A VISUAL STUDY</div>
+    <h1>같은 4비트, 다른 양자화</h1>
+    <p class="dek">숫자를 담을 자리가 부족하다면, 어떤 숫자를 남겨야 할까? 점을 움직이고 거리를 재면서 <strong>K-quants, I-quants, importance matrix</strong>를 연결해 본다.</p>
+    <div class="header-meta"><span class="meta-chip">2026-10-04</span><span class="meta-chip">6개의 시각 실험</span><span class="meta-chip">개념 실험 · 모델 성능 실측 아님</span></div>
+    <p class="q-source">읽기 자료: <a href="https://wikidocs.net/430183" target="_blank" rel="noreferrer">위키독스 03-3. K-quants와 I-quants, 그리고 importance matrix</a>. 아래 그림과 예제는 원리를 설명하기 위해 새로 구성했다.</p>
+  </header>
+
+  <section class="section" aria-labelledby="q-intuition">
+    <div class="section-head"><div class="section-number">01 / ROUND</div><div><h2 id="q-intuition">연속적인 값을 몇 개의 자리로 옮긴다</h2><p class="section-intro">파란 점은 원래 가중치다. 노란 눈금은 저장할 수 있는 값이다.</p></div></div>
+    <div class="section-body">
+      <div class="q-board">
+        <div class="q-controls"><label for="q-bits">가중치 비트 수 <output id="q-bits-value">3</output></label><input id="q-bits" type="range" min="2" max="4" step="1" value="3"><button type="button" data-q-snap aria-pressed="false">격자에 맞추기</button></div>
+        <svg class="q-plot" viewBox="0 0 680 220" role="img" aria-labelledby="q-round-title"><title id="q-round-title">가중치가 가장 가까운 균일 격자로 이동하는 그림</title><g data-q-grid></g><g data-q-original></g><g data-q-errors></g><g data-q-points></g><text x="40" y="195">−1</text><text x="333" y="195">0</text><text x="622" y="195">1</text></svg>
+        <div class="q-readout" data-q-round-result aria-live="polite"></div>
+        <p class="q-caption"><span class="q-blue">● 원래 값</span> → <span class="q-yellow">● 복원할 값</span> · 두 점 사이의 가로 거리가 반올림 오차다.</p>
+      </div>
+      <p>2비트라면 2² = 4개, 4비트라면 2⁴ = 16개 값을 구별한다. 저장할 때는 가까운 눈금의 번호만 적고, 계산할 때 그 번호를 실제 값으로 복원한다. 같은 범위에서 눈금 수를 늘리면 값을 더 세밀하게 표현할 수 있다.</p>
+      <div class="q-equation">원래 값 w → 정수 번호 q → 복원 값 ŵ = d · q + b</div>
+      <p><strong>d는 눈금 간격, b는 시작 위치</strong>다. 이 그림은 고정 범위의 균일 양자화 예제다. 실제 형식마다 부호 표현과 배율을 구하는 방법은 다르다.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="q-blocks">
+    <div class="section-head"><div class="section-number">02 / GROUP</div><div><h2 id="q-blocks">K-quants는 블록마다 자를 맞춘다</h2><p class="section-intro">작은 값끼리, 큰 값끼리 다른 배율을 쓴다. 그 배율도 저장 공간을 차지한다.</p></div></div>
+    <div class="section-body">
+      <div class="q-board">
+        <div class="q-board-top"><span>Q4_K · 슈퍼블록 1개</span><strong>256 weights</strong></div>
+        <div class="q-block-grid" data-q-blocks aria-label="Q4_K의 작은 블록 8개"></div>
+        <div class="q-readout" data-q-block-result aria-live="polite">블록을 선택하면 해당 블록의 저장 구조를 볼 수 있다.</div>
+        <div class="q-budget" role="img" aria-label="총 1152비트 중 가중치 1024비트, 작은 블록 정보 96비트, 상위 배율 32비트"><span class="q-budget-weights">1024</span><span class="q-budget-local">96</span><span class="q-budget-global">32</span></div>
+        <div class="q-legend"><span class="q-blue">가중치 256 × 4</span><span class="q-yellow">블록 정보 8 × (6 + 6)</span><span class="q-purple">상위 배율 16 × 2</span></div>
+        <div class="q-equation">(1024 + 96 + 32) ÷ 256 = <strong>4.5 bpw</strong></div>
+      </div>
+      <p>Q4_K는 32개씩 8개 블록을 묶는다. 작은 블록마다 배율과 최솟값을 나타내는 6비트 값 두 개를 두고, 이 값들을 복원할 상위 배율 두 개를 FP16으로 저장한다. 모든 작은 블록에 완전한 배율을 따로 두는 대신 배율도 압축하는 구조다.</p>
+      <p>bpw(bits per weight)는 <strong>가중치 한 개당 저장 비트 수</strong>다. Q4_0도 배율을 포함하면 (32 × 4 + 16) ÷ 32 = 4.5 bpw다. 두 형식은 저장 비용이 같아도 블록을 표현하는 방식이 다르다. K 계열 전체가 같은 블록 크기나 최솟값 필드를 쓰는 것은 아니다.</p>
+      <details class="q-details"><summary>K 계열의 저장 비용을 비교해 보기</summary><div class="comparison-scroll"><table class="comparison-table"><thead><tr><th>텐서 타입</th><th>구성</th><th>bpw</th></tr></thead><tbody><tr><td>Q2_K</td><td>16 × 16</td><td>2.625</td></tr><tr><td>Q3_K</td><td>16 × 16</td><td>3.4375</td></tr><tr><td>Q4_K</td><td>8 × 32</td><td>4.5</td></tr><tr><td>Q5_K</td><td>8 × 32</td><td>5.5</td></tr><tr><td>Q6_K</td><td>16 × 16</td><td>6.5625</td></tr><tr><td>Q8_0</td><td>32개 단일 블록</td><td>8.5</td></tr></tbody></table></div></details>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="q-nonlinear">
+    <div class="section-head"><div class="section-number">03 / PLACE</div><div><h2 id="q-nonlinear">눈금 간격도 바꿀 수 있다</h2><p class="section-intro">눈금 16개를 같은 간격으로 놓아야 할 이유는 없다.</p></div></div>
+    <div class="section-body">
+      <div class="q-board">
+        <div class="q-controls"><button type="button" data-q-levels="uniform" aria-pressed="true">균일한 16개 눈금</button><button type="button" data-q-levels="iq" aria-pressed="false">IQ4_NL의 16개 눈금</button></div>
+        <svg class="q-plot" viewBox="0 0 680 240" role="img" aria-labelledby="q-level-title"><title id="q-level-title">동일한 16개 눈금을 균일 또는 비균일하게 배치한 수직선</title><g data-q-distribution></g><g data-q-level-ticks></g><text x="38" y="212">−127</text><text x="346" y="212">0</text><text x="617" y="212">113</text></svg>
+        <p class="q-readout" data-q-level-result aria-live="polite"></p>
+        <p class="q-caption">배경 곡선은 0 근처에 값이 몰린 가상의 분포다. IQ4_NL의 눈금 값은 실제 코드의 표를 사용했다. 균일 눈금은 같은 양 끝점을 쓰는 비교용 예제다.</p>
+      </div>
+      <p>가중치가 특정 구간에 몰려 있다면 그 구간에 눈금을 더 배치하는 방식이 유리할 수 있다. IQ4_NL은 비균일한 16개 대표값을 쓰며, IQ4_XS도 이 대표값과 더 세분화된 배율 구조를 사용한다. 비균일 격자의 이득은 실제 가중치 분포와 배율에 따라 달라진다.</p>
+      <div class="q-equation">같은 4비트 → 같은 개수의 번호<br>번호가 가리키는 실제 값은 달라질 수 있다.</div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="q-codebook">
+    <div class="section-head"><div class="section-number">04 / LOOK UP</div><div><h2 id="q-codebook">여러 값을 묶어 주소 하나로 저장한다</h2><p class="section-intro">코드북은 자주 쓸 대표 벡터를 모아 둔 표다.</p></div></div>
+    <div class="section-body">
+      <div class="q-board">
+        <div class="q-controls"><label for="q-vector">원래 벡터 선택</label><select id="q-vector"><option value="0">(0.2, 0.7)</option><option value="1">(0.8, 0.8)</option><option value="2">(0.7, 0.2)</option></select></div>
+        <div class="q-split"><svg viewBox="0 0 340 280" role="img" aria-labelledby="q-vector-title"><title id="q-vector-title">2차원 예제에서 가장 가까운 코드북 벡터를 고르는 과정</title><g data-q-codebook></g></svg><div><div class="q-big" data-q-code-index>00</div><div data-q-code-result aria-live="polite"></div><p class="q-caption">학습용 2차원 코드북 · 대표 벡터 4개<br>주소에는 2비트가 필요하다.</p></div></div>
+      </div>
+      <p>위에서는 숫자 두 개를 각각 저장하지 않고, 가까운 대표 벡터의 주소를 저장한다. 복원할 때 같은 코드북을 찾아 숫자 두 개를 꺼낸다. 실제 IQ2_XXS는 <strong>8차원 크기 패턴을 256개 대표 패턴 중에서 선택</strong>하고, 부호와 배율을 별도로 저장한다. 그림의 2차원 예제는 이 묶음 선택 원리를 보여 준다.</p>
+      <div class="q-equation">IQ2_XXS · 가중치 32개 기준<br>패턴 주소 4 × 8 + 부호 4 × 7 + 배율 4 = 64비트<br>슈퍼블록까지 합치면 (8 × 64 + 16) ÷ 256 = <strong>2.0625 bpw</strong></div>
+      <p>주소만 보면 가중치당 1비트지만, 부호와 배율까지 포함해야 저장 비용이 나온다. 7비트 부호는 8개 부호를 독립적으로 기록하는 방식이 아니라 제한된 부호 패턴 중 하나를 선택한다. I-quants에는 이런 벡터 코드북 방식과 앞의 비균일 스칼라 방식이 있으며, 모든 IQ 형식이 같은 구조는 아니다.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="q-importance-concept">
+    <div class="section-head"><div class="section-number">05 / WEIGH</div><div><h2 id="q-importance-concept">어떤 방향의 오차가 더 비쌀까?</h2><p class="section-intro">가중치가 조금 달라져도 입력이 그 차이를 크게 증폭할 수 있다.</p></div></div>
+    <div class="section-body">
+      <div class="q-board">
+        <div class="q-controls"><label for="q-importance">첫 번째 방향의 중요도 <output id="q-importance-value">1</output>배</label><input id="q-importance" type="range" min="1" max="20" step="1" value="1"></div>
+        <div class="q-split"><svg viewBox="0 0 340 300" role="img" aria-labelledby="q-importance-title"><title id="q-importance-title">가중 거리가 원에서 타원으로 바뀌며 최적 후보가 A에서 B로 바뀌는 그림</title><g data-q-metric></g></svg><div><div class="q-big" data-q-winner>A</div><div class="q-costs" data-q-costs aria-live="polite"></div><p class="q-caption">파란 점: 원본 (0.35, 0.85)<br>A = (0.20, 0.90), B = (0.40, 0.60)<br>두 후보의 저장 비용은 같다고 가정한다.</p></div></div>
+        <p class="q-readout" data-q-metric-result></p>
+      </div>
+      <p>중요도가 1이면 보통의 거리로 고르므로 A가 가깝다. 첫 번째 방향의 중요도를 높이면 가로 오차가 작은 B가 유리해진다. 타원은 선택된 후보와 <strong>같은 가중 오차</strong>를 갖는 점들이다. 가로 폭이 좁아지는 것은 가로 오차를 더 엄격하게 본다는 뜻이다.</p>
+      <div class="q-equation">출력 y = Σ wⱼxⱼ → 출력 오차 Δy = Σ (ŵⱼ − wⱼ)xⱼ<br>입력 간 교차항을 무시한 근사: E[(Δy)²] ≈ Σ <span class="q-yellow">E[xⱼ²]</span> · (ŵⱼ − wⱼ)²</div>
+      <p><strong>imatrix는 캘리브레이션 입력의 활성값 제곱 통계</strong>를 모은다. 직관적으로는 큰 입력이 자주 들어오는 방향의 오차에 더 큰 비용을 매긴다. 모든 가중치의 중요도를 개별적으로 직접 측정한 표나 전체 Hessian을 저장하는 것은 아니다. 실제 최적화는 형식마다 배율·격자·코드북 선택에 이 정보를 활용한다.</p>
+      <div class="q-flow"><span>대표 텍스트</span><span aria-hidden="true">→</span><span>모델 실행<br>입력 활성값 통계</span><span aria-hidden="true">→</span><span>imatrix</span><span aria-hidden="true">→</span><span>양자화 때 오차 가중</span></div>
+      <p>K-quants에도 imatrix를 사용할 수 있다. IQ1 계열, IQ2_XXS·XS·S, IQ3_XXS의 일반 내부 텐서는 확인한 llama.cpp 코드에서 imatrix를 요구한다. IQ3_S와 IQ4 계열은 선택 사항이다. 임베딩·출력 텐서 예외가 있고, Q2_K_S에도 필수 조건이 있으므로 실행 버전의 규칙을 확인한다.</p>
+      <p>일반 문장으로 모은 통계가 서버 로그·YAML·도구 호출 JSON을 잘 대표한다고 보장할 수는 없다. 캘리브레이션 자료는 실제 사용 입력을 반영하도록 구성하고, 평가 자료는 별도로 두어 결과를 확인한다.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="q-mix">
+    <div class="section-head"><div class="section-number">06 / MIX</div><div><h2 id="q-mix">Q4_K_M의 모든 가중치가 4비트일까?</h2><p class="section-intro">텐서 타입의 비트 수와 모델 전체의 평균을 구분하자.</p></div></div>
+    <div class="section-body">
+      <div class="q-board">
+        <div class="q-controls"><label for="q-mix-ratio">Q6_K로 저장하는 가중치 비율 <output id="q-mix-value">20%</output></label><input id="q-mix-ratio" type="range" min="0" max="100" value="20" step="5"></div>
+        <div class="q-mix-cells" data-q-mix-cells aria-label="가중치 비율을 나타내는 20개 구역"></div>
+        <div class="q-legend"><span class="q-blue">Q4_K · 4.5 bpw</span><span class="q-purple">Q6_K · 6.5625 bpw</span></div>
+        <div class="q-equation" data-q-mix-result aria-live="polite"></div>
+        <p class="q-caption">비율은 텐서 개수가 아닌 가중치 개수 기준이다. 이 조절기는 두 타입만 섞는 학습용 예제이며 Q4_K_M의 실제 배치 규칙을 재현하지 않는다.</p>
+      </div>
+      <p>Q4_K는 텐서 저장 형식이고, Q4_K_M은 여러 텐서에 어떤 형식을 쓸지 정하는 혼합 규칙이다. S·M·L 접미는 모델 크기나 문맥 길이를 뜻하지 않는다. 더 민감한 텐서에 높은 정밀도를 배정하는 정도를 나타내며, 구체적 규칙은 기본 타입·모델 구조·구현 버전에 따라 달라진다.</p>
+      <p>모델의 저장 크기를 구할 때는 각 타입으로 저장한 가중치 수에 해당 bpw를 곱해 더한다. GGUF 메타데이터와 정렬 비용도 별도이며, 실행 시 필요한 KV 캐시와 작업 공간은 이 가중치 계산에 포함되지 않는다.</p>
+      <details class="q-details"><summary>대표 IQ 형식의 타입 저장 비용</summary><div class="comparison-scroll"><table class="comparison-table"><thead><tr><th>타입</th><th>bpw</th><th>구분</th></tr></thead><tbody><tr><td>IQ1_S</td><td>1.5625</td><td>초저비트 형식</td></tr><tr><td>IQ2_XXS</td><td>2.0625</td><td>코드북·부호·배율</td></tr><tr><td>IQ2_XS</td><td>2.3125</td><td>추가 배율 정보</td></tr><tr><td>IQ2_S</td><td>2.5625</td><td>추가 인덱스·배율 정보</td></tr><tr><td>IQ3_XXS</td><td>3.0625</td><td>3비트급 코드북</td></tr><tr><td>IQ3_S</td><td>3.4375</td><td>3비트급 형식</td></tr><tr><td>IQ4_XS</td><td>4.25</td><td>비균일 대표값·배율 구조</td></tr><tr><td>IQ4_NL</td><td>4.5</td><td>32개당 FP16 배율</td></tr></tbody></table></div><p>이 값은 텐서 타입 자체의 비용이다. IQ3_M처럼 혼합 규칙을 나타내는 이름에는 하나의 고정된 타입 bpw를 붙일 수 없다.</p></details>
+      <div class="q-takeaway"><strong>배포본을 비교할 때 연결해서 볼 것</strong><p>어떤 값으로 복원하는가 → 어느 텐서에 비트를 더 주는가 → 어떤 입력으로 중요도를 구했는가 → 같은 실행 조건에서 실제 과제를 잘 푸는가.</p><p>템플릿과 생성 파라미터도 맞춰야 결과 차이를 해석할 수 있다. 이름의 “4”만으로 품질이나 속도를 단정할 수는 없다.</p></div>
+      <details class="q-details"><summary>이해했는지 확인하기</summary><p><strong>Q4_0과 Q4_K가 모두 4.5 bpw이면 같은 형식일까?</strong> 아니다. 같은 저장 비용 안에서 블록·배율을 배치하는 방식이 다르다.</p><p><strong>imatrix를 쓰면 반드시 더 많은 비트를 저장할까?</strong> 아니다. 같은 형식에서도 오차의 배분을 바꿀 수 있다. 형식을 섞어 비트를 더 주는 작업은 별개의 선택이다.</p><p><strong>IQ4_XS의 4.25 bpw를 모델 파일 크기에 바로 적용할까?</strong> 모든 가중치가 그 타입일 때의 부분 계산이다. 혼합된 타입과 나머지 파일 비용을 함께 계산해야 한다.</p></details>
+    </div>
+  </section>
+
+  <section class="section q-references" aria-labelledby="q-sources"><h2 id="q-sources">출처와 수치 확인</h2><p>원문의 흐름을 바탕으로, 블록 비용과 필수 조건은 원문이 명시한 llama.cpp <code>8ea2902</code>의 구현과 대조했다.</p><ul><li><a href="https://wikidocs.net/430183" target="_blank" rel="noreferrer">위키독스 원문</a> — 마지막 편집 표시 2026-09-14. K/I 계열, 혼합 정밀도, imatrix의 설명 흐름.</li><li><a href="https://github.com/ggml-org/llama.cpp/blob/8ea2902/ggml/src/ggml-common.h" target="_blank" rel="noreferrer">ggml-common.h</a> — 블록 구조체, 크기 검증, IQ 대표값 표.</li><li><a href="https://github.com/ggml-org/llama.cpp/blob/8ea2902/src/llama-quant.cpp" target="_blank" rel="noreferrer">llama-quant.cpp</a> — 타입 선택과 imatrix 필수 조건.</li><li><a href="https://github.com/ggml-org/llama.cpp/blob/11fe02151f79c41d0d4af7da708755d73b9c0da6/tools/imatrix/imatrix.cpp" target="_blank" rel="noreferrer">imatrix.cpp</a> · <a href="https://github.com/ggml-org/llama.cpp/blob/11fe02151f79c41d0d4af7da708755d73b9c0da6/tools/imatrix/README.md" target="_blank" rel="noreferrer">사용 문서</a> — 활성값 제곱의 누적과 양자화에 사용하는 과정.</li></ul><p><strong>원문 표의 두 수치 보정:</strong> Q2_K는 (64 + 16 + 4)바이트 × 8 ÷ 256 = <strong>2.625 bpw</strong>. IQ2_S는 (64 + 8 + 8 + 2)바이트 × 8 ÷ 256 = <strong>2.5625 bpw</strong>. 각각 원문의 2.5625, 2.5와 달라 구조체 기준으로 표시했다.</p><p>색상 규칙: 파랑은 원래 값·기본 가중치, 노랑은 복원 값·선택된 후보, 보라는 추가 배율·높은 정밀도다. 움직임 줄이기 설정에서는 전환 애니메이션을 생략한다.</p></section>
+</article>
