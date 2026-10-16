@@ -1,0 +1,234 @@
+<article class="article hy-memory-study">
+  <header class="article-header" data-index="01">
+    <div class="eyebrow">MEMORY WRITER / POST-TRAINING</div>
+    <h1>Hy-Memory: 답변보다<br>기억을 잘 쓰는 모델</h1>
+    <p class="dek">Tencent의 Hy-Memory-30B-A3B는 대화에서 남길 사실을 고르고, 새로운 정보에 맞춰 외부 기억을 갱신하는 전용 모델이다. 답변 모델 전체를 바꾸는 것이 아니라 메모리 시스템의 writer를 교체한다. <a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B" target="_blank" rel="noopener noreferrer">[1]</a></p>
+    <div class="header-meta"><span class="meta-chip">30B TOTAL / ~3B ACTIVE</span><span class="meta-chip">APACHE-2.0</span><span class="meta-chip">논문 2026-10-15 · 정리 2026-10-17</span><span class="meta-chip">자료 분석 · GPU 실측 아님</span></div>
+  </header>
+
+  <section class="section" aria-labelledby="hym-role">
+    <div class="section-head"><div class="section-number">01 / ROLE</div><div><h2 id="hym-role">기억하는 능력과 답변하는 능력을 분리한다</h2><p class="section-intro">여기서 memory는 GPU 메모리나 KV cache가 아니라, 다음 대화에서도 다시 읽을 수 있는 외부 기록이다.</p></div></div>
+    <div class="section-body">
+      <div class="hym-flow" role="group" aria-label="장기기억 처리 순서">
+        <div class="hym-card"><span class="hym-label">WRITE</span><h3>Hy-Memory 모델</h3><p>대화 + 기존 기억을 받아 무엇을 남기거나 바꿀지 결정한다.</p></div>
+        <div class="hym-card"><span class="hym-label">STORE / RETRIEVE</span><h3>메모리 프레임워크</h3><p>변경을 저장하고, 나중에 질문과 관련된 기록을 검색한다.</p></div>
+        <div class="hym-card"><span class="hym-label">READ / ANSWER</span><h3>별도의 답변 모델</h3><p>검색된 기억을 근거로 사용자에게 답한다.</p></div>
+      </div>
+      <p class="hym-caption">왼쪽부터 쓰기 → 저장·검색 → 답변. 모델 카드의 역할 구분을 재구성한 설명이며 실행 로그가 아니다. <a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B" target="_blank" rel="noopener noreferrer">[1]</a></p>
+      <div class="takeaway"><span class="takeaway-mark">!</span><p><strong>비유하면 “답변 담당자” 옆에 “기록 담당자”를 두는 구조다.</strong> 기록을 모델 가중치에 매번 재학습하는 방식이 아니다. 모델 서버를 켜는 것만으로 영구 저장소가 생기지도 않는다.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hym-example">
+    <div class="section-head"><div class="section-number">02 / EXAMPLE</div><div><h2 id="hym-example">좋은 요약보다 정확한 상태 변경이 중요하다</h2><p class="section-intro">아래는 설명용 가상 대화와 기대 기록이다. 실제 모델의 생성 결과가 아니다.</p></div></div>
+    <div class="section-body">
+      <div class="hym-example"><span class="hym-label">가상 입력 · 두 번의 대화</span><p>10월 1일: “Aurora API는 FastAPI로 만들고 DB는 MySQL을 쓰기로 했어.”</p><p>10월 10일: “Aurora DB는 PostgreSQL로 바꿨어. FastAPI는 그대로야. 고마워!”</p></div>
+      <div class="hym-table"><table><caption>기억 품질을 판단하는 예시</caption><thead><tr><th scope="col">기록 방식</th><th scope="col">나중에 생기는 문제 또는 이점</th></tr></thead><tbody>
+        <tr><th scope="row">“사용자는 백엔드를 개발한다.”</th><td>프로젝트명, 프레임워크, DB 변경을 모두 잃는다.</td></tr>
+        <tr><th scope="row">MySQL과 PostgreSQL을 나란히 저장</th><td>어느 것이 현재 결정인지 알 수 없다.</td></tr>
+        <tr><th scope="row">현재 / 과거 / 유지 조건을 구분</th><td>Aurora의 현재 DB는 PostgreSQL. 10월 10일 MySQL을 대체했다. FastAPI는 유지된다.</td></tr>
+        <tr><th scope="row">인사말은 제외</th><td>“고마워”를 장기 선호나 프로젝트 사실로 만들지 않는다.</td></tr>
+      </tbody></table></div>
+      <p>이 예시에서 검사할 질문은 “지금 DB는 무엇인가?”, “언제 무엇에서 바뀌었나?”, “FastAPI도 교체했나?”다. 매끄러운 한 줄 요약인지보다 <strong>이 질문들에 근거 있게 답할 정보가 남아 있는지</strong>를 확인한다.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hym-training">
+    <div class="section-head"><div class="section-number">03 / TRAIN</div><div><h2 id="hym-training">먼저 쓰는 법을 배우고, 기억의 쓸모로 보상한다</h2><p class="section-intro">논문 §4–6과 Figure 1의 핵심. <a href="https://arxiv.org/pdf/2610.22196#page=5" target="_blank" rel="noopener noreferrer">[2]</a></p></div></div>
+    <div class="section-body">
+      <div class="hym-grid">
+        <div class="hym-card"><span class="hym-label">STAGE 1 · ON-POLICY DISTILLATION</span><h3>자기가 쓴 기억 위에서 연습</h3><p>학생이 실제 프레임워크에서 쓴 기록과 출력을 교사가 지도한다. 자기 이전 출력이 만든 상태에서 다음 쓰기를 배운다.</p></div>
+        <div class="hym-card"><span class="hym-label">STAGE 2 · ATTRIBUTED MEMORY RL</span><h3>나중에 답할 수 있는 기억에 보상</h3><p>같은 초기 bank에서 8개 후보를 전개한다. 최대 5개 chunk를 묶어 처리한다. 답변·채점 모델은 고정하고 writer만 학습한다.</p></div>
+      </div>
+      <div class="hym-formula"><code>chunk 점수 = PRM + 2 × ORM − 0.3 × 저장량 페널티</code></div>
+      <p><strong>PRM</strong>은 chunk의 사실을 정확히 회수하는지와 저장하면 안 되는 내용을 걸러냈는지를 본다. 여기서는 숨은 추론과정 채점이 아니다. <strong>ORM</strong>은 여러 chunk를 연결한 답변의 근거를 출처 chunk에 귀속한다. 페널티는 무조건 많이 저장하는 편법을 억제한다.</p>
+      <p><strong>Chunk-level GRPO</strong>는 같은 chunk 위치의 후보끼리 점수를 비교한다. 다음 window에는 총점이 가장 높은 후보의 마지막 bank를 넘긴다. chunk별 최고 기록을 짜깁기하지 않는다.</p>
+      <p class="hym-caption">학습된 프레임워크: Mem0, MemOS, Hy-Memory의 Chat·Working·Coding. EverMemOS는 학습에 넣지 않은 평가 환경이다. <a href="https://arxiv.org/pdf/2610.22196#page=4" target="_blank" rel="noopener noreferrer">[2]</a></p>
+      <details class="hym-details"><summary>이 설계에서 아직 검증이 필요한 부분</summary><p>보상별 통제 실험·반복 seed·사람과 judge의 일치도 검증이 남아 있다. 근거 귀속은 인과관계 증명도 아니므로, 개별 기법의 기여를 단정하지 않는다. <a href="https://arxiv.org/pdf/2610.22196#page=12" target="_blank" rel="noopener noreferrer">[2]</a></p></details>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hym-benchmark">
+    <div class="section-head"><div class="section-number">04 / EVAL</div><div><h2 id="hym-benchmark">“범용 모델보다 똑똑하다”는 순위표가 아니다</h2><p class="section-intro">공식 모델 카드의 writer 교체 실험. 동일한 검색·답변·채점 조건에서 각 writer가 빈 저장소부터 기록을 만든다. <a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B#experiments" target="_blank" rel="noopener noreferrer">[1]</a></p></div></div>
+    <div class="section-body">
+      <div class="hym-table"><table><caption>작성자 보고 점수 · 일부 비교 모델 발췌 · 높을수록 좋음</caption><thead><tr><th scope="col">Memory writer</th><th scope="col">Mem0</th><th scope="col">Hy-Memory</th><th scope="col">MemOS</th><th scope="col">EverMemOS*</th><th scope="col">평균</th></tr></thead><tbody>
+        <tr class="hym-highlight"><th scope="row">Hy-Memory-30B-A3B</th><td>54.02</td><td>60.55</td><td>50.51</td><td>56.89</td><td><strong>55.49</strong></td></tr>
+        <tr><th scope="row">Claude Opus 5</th><td>53.43</td><td>60.53</td><td>50.50</td><td>54.04</td><td>54.62</td></tr>
+        <tr><th scope="row">DeepSeek V4.1 Flash</th><td>49.73</td><td>60.20</td><td>49.17</td><td>55.47</td><td>53.64</td></tr>
+        <tr><th scope="row">Qwen3.6-35B-A3B</th><td>47.51</td><td>55.87</td><td>47.36</td><td>50.75</td><td>50.37</td></tr>
+        <tr><th scope="row">Hy3-A3B Base</th><td>40.20</td><td>50.39</td><td>49.05</td><td>50.98</td><td>47.66</td></tr>
+      </tbody></table></div>
+      <p class="hym-caption">* 학습에서 제외한 프레임워크. 각 benchmark의 고정 20% 표본을 평가했다. 프레임워크별 값은 LoCoMo, LongMemEval, PersonaMem-v2, Travel, Shopping, CMB의 6개 지표를 같은 비중으로 평균하며, 마지막 열은 4개 프레임워크의 등가중 평균이다. 전체 데이터 평가나 하나의 일반 정답률이 아니다. <a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B#evaluation-principles" target="_blank" rel="noopener noreferrer">[1]</a></p>
+      <div class="takeaway warning"><span class="takeaway-mark">!</span><p><strong>해석:</strong> 표시된 평균 차이는 Opus 5 대비 +0.87점이다. Hy-Memory·MemOS에서는 차이가 각각 0.02·0.01점에 불과하다. 이 표만으로 통계적 우위, 한국어 품질, 토큰 속도, 운영비 절감을 입증할 수 없다. 개별 과제에서 모두 이기는 것도 아니다.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hym-stack">
+    <div class="section-head"><div class="section-number">05 / STACK</div><div><h2 id="hym-stack">모델 · SDK · MemHub를 구별하자</h2><p class="section-intro">비슷한 이름이지만 교체하거나 도입하는 단위가 서로 다르다.</p></div></div>
+    <div class="section-body">
+      <div class="hym-table"><table><caption>구성요소의 책임</caption><thead><tr><th scope="col">구성요소</th><th scope="col">하는 일</th><th scope="col">따로 필요한 것</th></tr></thead><tbody>
+        <tr><th scope="row">Hy-Memory-30B-A3B</th><td>기억 쓰기에 특화된 모델 가중치</td><td>추론 엔진, 저장·검색 시스템</td></tr>
+        <tr><th scope="row">Hy Memory SDK</th><td>추출·충돌 조정·저장·검색을 연결</td><td>LLM endpoint와 embedding endpoint</td></tr>
+        <tr><th scope="row">MemHub</th><td>사용자가 허용한 여러 AI 앱의 기록을 관리·재사용하는 제품</td><td>수집·모델 처리·다른 앱의 읽기에 대한 각각의 권한</td></tr>
+      </tbody></table></div>
+      <p>SDK의 <code>lite</code>는 raw 기록의 embedding 중심이며 writer LLM을 호출하지 않는다. <code>pro</code>부터 LLM 추출과 reconcile을 사용한다. <code>ultra</code>는 graph와 추가적인 기억 진화를 포함한다. 따라서 writer 모델을 비교할 때 <code>lite</code>만 시험하면 목적과 어긋난다. <a href="https://github.com/Tencent-Hunyuan/Hy-Memory#system-architecture" target="_blank" rel="noopener noreferrer">[4]</a></p>
+      <p><code>working</code>은 작업 사실과 재사용 가능한 경험을, <code>coding</code>은 여기에 코드 변경 이력을 더한다. 현재 SDK에서 working/coding 쓰기는 tool trace가 필요하며, 없으면 chat으로 돌아간다. Coding 검색 시에는 <code>scene</code>, <code>user_ids</code>, <code>workspace_id</code>를 명시하고 branch도 일관되게 관리한다. branch 필터에는 branch가 없는 공통 기록이 포함될 수 있으므로 엄격한 보안 경계로 간주하지 않는다. <a href="https://github.com/Tencent-Hunyuan/Hy-Memory/blob/main/docs/scene_coding_usage.md" target="_blank" rel="noopener noreferrer">[6]</a></p>
+      <p class="hym-caption">MemHub의 local-first는 모든 모델 처리가 자동으로 오프라인이라는 뜻이 아니다. 연결한 endpoint와 권한을 별도로 확인한다. 모델 파일만 받아도 Codex·Cursor의 기억이 자동 공유되는 것은 아니다. <a href="https://github.com/Tencent-Hunyuan/Hy-Memory/blob/main/memhub/README.md" target="_blank" rel="noopener noreferrer">[7]</a></p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hym-resources">
+    <div class="section-head"><div class="section-number">06 / MEMORY</div><div><h2 id="hym-resources">3B 활성 ≠ 3B 가중치만 올린다</h2><p class="section-intro">활성 파라미터는 토큰별 계산 규모의 단서다. 상주 가중치, KV cache, 실행 버퍼는 별도로 계산한다.</p></div></div>
+    <div class="section-body">
+      <div class="hym-table"><table><caption>공개 config.json에서 확인한 구성 [3]</caption><tbody>
+        <tr><th scope="row">아키텍처</th><td><code>HYV3ForCausalLM</code> / <code>hy_v3</code></td></tr>
+        <tr><th scope="row">Transformer</th><td>48 layers · hidden size 2,048</td></tr>
+        <tr><th scope="row">MoE</th><td>128 experts · token당 8개 선택 · shared expert 1개 · 첫 MLP는 dense</td></tr>
+        <tr><th scope="row">Attention</th><td>32 query heads / 4 KV heads · head dimension 128</td></tr>
+        <tr><th scope="row">설정상 위치 한도</th><td>262,144 tokens. 해당 길이의 품질·속도 보증이나 장기 저장소 용량을 뜻하지 않는다.</td></tr>
+      </tbody></table></div>
+      <p><a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B/blob/main/config.json" target="_blank" rel="noopener noreferrer">[3] 모델 설정</a>과 <a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B/tree/main" target="_blank" rel="noopener noreferrer">[9] 약 60.1 GB로 표시된 파일 저장소</a>를 확인했다. 아래 값은 <strong>30B를 반올림해 계산한 가중치 payload 추정</strong>이며 실제 양자화 배포판의 크기가 아니다.</p>
+      <div class="hym-table"><table><caption>자체 산술 추정 · 가중치만 · 1 GB = 10⁹ bytes</caption><thead><tr><th scope="col">정밀도 가정</th><th scope="col">계산</th><th scope="col">payload</th><th scope="col">주의</th></tr></thead><tbody>
+        <tr><th scope="row">BF16</th><td>30B × 2 bytes</td><td>약 60 GB / 55.9 GiB</td><td>일부 FP32 tensor·런타임 버퍼 별도</td></tr>
+        <tr><th scope="row">8-bit</th><td>30B × 1 byte</td><td>약 30 GB / 27.9 GiB</td><td>scale·고정밀 tensor 별도</td></tr>
+        <tr><th scope="row">4-bit</th><td>30B × 0.5 byte</td><td>약 15 GB / 14.0 GiB</td><td>이 표는 해당 형식의 지원·품질을 보증하지 않음</td></tr>
+      </tbody></table></div>
+      <p>공개 attention 설정에 일반적인 BF16 KV 저장을 가정하면, token당 <code>2 × 48 × 4 × 128 × 2 = 98,304 bytes</code>, 즉 <strong>96 KiB</strong>다. 단일 sequence의 실제 보유 KV 길이가 8,192 / 32,768 / 262,144 tokens이면 약 <strong>0.75 / 3 / 24 GiB</strong>가 된다. 이는 KV 분할·공유·양자화·padding을 반영하지 않은 논리적 payload 계산이다.</p>
+      <div class="takeaway warning"><span class="takeaway-mark">!</span><p>가중치가 들어가는 것과 긴 문맥·동시 요청까지 실용적으로 처리하는 것은 다르다. 처음에는 짧은 문맥과 동시 요청 1개로 시작해 peak VRAM과 쓰기 지연시간을 측정한다. GGUF·MLX·AWQ·SGLang 등은 이 글에서 동작을 검증하지 않았다.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hym-quickstart">
+    <div class="section-head"><div class="section-number">07 / TRY</div><div><h2 id="hym-quickstart">모델 호출과 영구 저장을 나눠 시험한다</h2><p class="section-intro">실행 전 검토용 예제다. GPU에서 실행하거나 속도를 측정하지 않았다.</p></div></div>
+    <div class="section-body">
+      <p>공식 카드가 명시한 테스트 버전은 <code>vLLM 0.31.0</code>이다. 아래의 8K 문맥·동시 요청 1개·localhost 바인딩은 초기 실험용 제안이며 공식 벤치마크 설정이 아니다. <a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B#quickstart" target="_blank" rel="noopener noreferrer">[1]</a> <a href="https://docs.vllm.ai/en/latest/cli/serve/" target="_blank" rel="noopener noreferrer">[8]</a></p>
+      <pre><code class="language-bash"># CUDA/PyTorch 호환성을 확인한 별도 환경에서 실행
+pip install 'vllm==0.31.0'
+vllm serve tencent/Hy-Memory-30B-A3B \
+  --served-model-name hy-memory \
+  --host 127.0.0.1 --port 8000 \
+  --dtype bfloat16 --max-model-len 8192 --max-num-seqs 1</code></pre>
+      <details class="hym-details"><summary>1단계: JSON 기억 후보를 추출하는 API 요청</summary>
+        <pre><code class="language-bash">curl --fail-with-body --max-time 120 \
+  http://127.0.0.1:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "hy-memory",
+    "messages": [
+      {"role": "system", "content": "Extract only explicit durable user facts. Do not infer. Return a JSON object with a memories list of strings."},
+      {"role": "user", "content": "나는 Python을 주로 쓰고, 설명에 코드 예제가 있는 것을 선호해."}
+    ],
+    "temperature": 0,
+    "max_tokens": 512,
+    "chat_template_kwargs": {"reasoning_effort": "no_think"}
+  }'</code></pre>
+        <p>HTTP 성공만 보지 말고 <code>choices[0].message.content</code>가 JSON으로 파싱되는지, <code>memories</code>가 문자열 배열인지, 입력에 없는 사실이 생기지 않았는지 확인한다. 이 요청 자체는 영구 저장을 수행하지 않는다.</p>
+      </details>
+      <details class="hym-details"><summary>2단계: Hy Memory SDK의 writer endpoint 연결</summary>
+        <p>LLM과 embedding 설정은 서로 다르다. <strong>기존 embedding endpoint·모델·실제 출력 차원</strong>을 먼저 설정해야 한다. 아래 가드는 필수값이 없으면 중단한다. <a href="https://github.com/Tencent-Hunyuan/Hy-Memory/blob/main/docs/env_reference.md" target="_blank" rel="noopener noreferrer">[5]</a></p>
+        <pre><code class="language-bash">pip install 'hy-memory==2.0.1'
+export MEMORY_LLM_PROVIDER='openai'  # API 형식; 로컬 vLLM에 연결
+export MEMORY_EMBEDDER_PROVIDER='openai'
+export MEMORY_LLM_BASE_URL='http://127.0.0.1:8000/v1'
+export MEMORY_LLM_MODEL='hy-memory'
+export MEMORY_LLM_API_KEY='EMPTY'
+export MEMORY_LLM_EXTRA_BODY='{"chat_template_kwargs":{"reasoning_effort":"no_think"}}'
+export MEMORY_DATA_DIR='./.hy-memory-poc'
+
+# 자신의 embedding 서비스 값으로 미리 export한 뒤 확인
+: "${MEMORY_EMBEDDER_BASE_URL:?embedding endpoint 필요}"
+: "${MEMORY_EMBEDDER_MODEL:?embedding 모델명 필요}"
+: "${MEMORY_EMBEDDER_API_KEY:?embedding 인증값 필요}"
+: "${MEMORY_EMBEDDING_DIMS:?실제 embedding 출력 차원 필요}"
+export MEMORY_EMBEDDER_BASE_URL MEMORY_EMBEDDER_MODEL
+export MEMORY_EMBEDDER_API_KEY MEMORY_EMBEDDING_DIMS</code></pre>
+        <pre><code class="language-python">from uuid import uuid4
+from hy_memory import HyMemoryClient
+
+user_id = f"hym-poc-{uuid4().hex}"  # 반복 실행 시 기존 bank와 분리
+client = HyMemoryClient(mode="pro")
+try:
+    client.add("나는 Python을 주로 쓴다.", user_id=user_id)
+    result = client.search(
+        "주로 사용하는 프로그래밍 언어는?",
+        user_ids=[user_id],
+        limit=5,
+    )
+    print(result)  # 검색 결과이며 최종 답변 모델의 응답은 아님
+finally:
+    client.close()</code></pre>
+        <p>이는 chat 저장·검색 smoke test다. 기존 기억과의 충돌 해결, 재시작 후 복구, coding trace, 운영 권한까지 검증한 예제가 아니다. <code>MEMORY_LLM_*</code>는 SDK 공통 LLM 설정이므로 writer 외 LLM 사용 경로도 함께 바뀔 수 있다. 엄밀한 비교 실험에서는 검색·답변 측 모델과 설정을 따로 고정한다.</p>
+      </details>
+      <p class="hym-caption">외부 embedding/API를 연결하면 기록이 해당 서비스로 전송될 수 있다. 먼저 가상 데이터로 시험하고, 실제 대화·키·bank 파일을 공개 저장소에 커밋하지 않는다. 외부 서비스의 비용과 데이터 정책도 별도 확인한다.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hym-poc">
+    <div class="section-head"><div class="section-number">08 / VERIFY</div><div><h2 id="hym-poc">도입 전에는 “무엇을 잘못 기억했나”를 검사한다</h2><p class="section-intro">아래는 자체 PoC 제안이다. 공식 측정치나 이미 통과한 테스트가 아니다.</p></div></div>
+    <div class="section-body">
+      <div class="hym-table"><table><caption>한국어·코딩 에이전트용 검증표</caption><thead><tr><th scope="col">검사</th><th scope="col">넣어 볼 입력</th><th scope="col">확인할 결과</th></tr></thead><tbody>
+        <tr><th scope="row">정확성</th><td>비슷한 프로젝트명, 숫자, 파일 경로, 부정문</td><td>이름·수치·범위·부정이 보존되는가?</td></tr>
+        <tr><th scope="row">갱신</th><td>DB 교체 → 재검토 → 결정 취소</td><td>현재 결정과 과거 이력을 구분하는가?</td></tr>
+        <tr><th scope="row">선별</th><td>인사, 모델의 제안, 가정, 사용자 확정 발언</td><td>제안을 사실로 저장하거나 쓸데없는 기록을 늘리지 않는가?</td></tr>
+        <tr><th scope="row">격리·보안</th><td>두 user, 두 workspace, 악의적인 지시가 섞인 기록</td><td>다른 사용자의 기억이 노출되지 않고 기록 속 지시를 권한으로 취급하지 않는가?</td></tr>
+        <tr><th scope="row">복구·삭제</th><td>저장 후 재시작, 수정, 삭제, 재검색</td><td>기록이 복구되고 삭제 정책이 검색·파생 데이터에도 반영되는가?</td></tr>
+        <tr><th scope="row">효율</th><td>같은 대화·질문·검색량으로 writer만 교체</td><td>후속 QA 품질, JSON 오류율, 중복률, 저장 tokens, p50/p95 쓰기 지연, peak VRAM</td></tr>
+      </tbody></table></div>
+      <p><strong>추천 순서:</strong> 가상 한국어 대화로 추출 → 빈 bank에서 두 writer 비교 → 재시작·삭제·격리 확인 → 실제 사용을 닮은 익명화 자료로 확장. 각 단계에서 실패한 사실과 원문 위치를 함께 남기면 단순 평균 점수보다 개선 방향을 찾기 쉽다.</p>
+      <div class="takeaway"><span class="takeaway-mark">→</span><p>검토할 가설은 “작은 활성 모델로 기억 쓰기를 분리해도 필요한 사실이 유지되는가?”다. 답변 품질을 유지하면서 비용·지연까지 좋아지는지는 실제 전체 파이프라인에서 확인해야 한다.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hym-sources">
+    <div class="section-head"><div class="section-number">09 / SOURCES</div><div><h2 id="hym-sources">1차 자료와 확인 범위</h2><p class="section-intro">2026-10-17 열람 기준. 아래 링크는 공식 모델·논문·구현 문서다.</p></div></div>
+    <div class="section-body hym-sources">
+      <p><a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B" target="_blank" rel="noopener noreferrer">[1] Tencent 모델 카드</a> — 모델 역할, 라이선스 표기, 평가 표, quickstart.</p>
+      <p><a href="https://arxiv.org/pdf/2610.22196" target="_blank" rel="noopener noreferrer">[2] 기술 보고서 · arXiv:2610.22196v1</a> — §4–6 학습과 보상, §8 평가, §10 한계. Figure 1·Table 6과 상세 평가표를 확인한다.</p>
+      <p><a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B/blob/main/config.json" target="_blank" rel="noopener noreferrer">[3] config.json</a> — attention·MoE·위치 설정. 본문의 KV 계산 입력.</p>
+      <p><a href="https://github.com/Tencent-Hunyuan/Hy-Memory" target="_blank" rel="noopener noreferrer">[4] Hy Memory 공식 저장소</a> — SDK, 모드, 저장·검색 구성.</p>
+      <p><a href="https://github.com/Tencent-Hunyuan/Hy-Memory/blob/main/docs/env_reference.md" target="_blank" rel="noopener noreferrer">[5] SDK 환경변수</a> — LLM·embedding endpoint와 extra body.</p>
+      <p><a href="https://github.com/Tencent-Hunyuan/Hy-Memory/blob/main/docs/scene_coding_usage.md" target="_blank" rel="noopener noreferrer">[6] Working / Coding 문서</a> — tool trace, scene, workspace·branch 범위.</p>
+      <p><a href="https://github.com/Tencent-Hunyuan/Hy-Memory/blob/main/memhub/README.md" target="_blank" rel="noopener noreferrer">[7] MemHub README</a> — 제품·runtime과 권한 경계.</p>
+      <p><a href="https://docs.vllm.ai/en/latest/cli/serve/" target="_blank" rel="noopener noreferrer">[8] vLLM serve 문서</a> — 서빙 인자. latest 문서는 이후 바뀔 수 있으므로 설치 버전의 help도 확인한다.</p>
+      <p><a href="https://huggingface.co/tencent/Hy-Memory-30B-A3B/tree/main" target="_blank" rel="noopener noreferrer">[9] 공개 모델 파일</a> — 저장소 크기와 tensor 파일 확인.</p>
+      <p class="hym-caption">공식 결과와 자체 산술·가상 예시·PoC 제안을 분리했다. 서빙·양자화·한국어 성능의 자체 실측은 포함하지 않는다.</p>
+    </div>
+  </section>
+</article>
+
+<style>
+.hy-memory-study { overflow-wrap: anywhere; }
+.hy-memory-study .hym-flow { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.hy-memory-study .hym-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.hy-memory-study .hym-card { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); }
+.hy-memory-study .hym-card p:last-child { margin-bottom: 0; }
+.hy-memory-study .hym-label { display: block; color: var(--green); font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; margin-bottom: 12px; }
+.hy-memory-study .hym-caption { font-size: 13px; color: var(--muted); line-height: 1.75; margin-top: 14px; }
+.hy-memory-study .hym-example { padding: 24px; border-left: 3px solid var(--green); background: var(--paper); border-radius: 0 14px 14px 0; margin-bottom: 22px; }
+.hy-memory-study .hym-formula { padding: 20px; margin: 20px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.hy-memory-study .hym-formula code { background: none; padding: 0; white-space: normal; }
+.hy-memory-study .hym-table { max-width: 100%; overflow-x: auto; margin: 22px 0; border: 1px solid var(--line); border-radius: 12px; }
+.hy-memory-study table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.hy-memory-study caption { text-align: left; padding: 13px 16px; color: var(--muted); font-size: 12px; background: var(--paper); }
+.hy-memory-study th,.hy-memory-study td { padding: 13px 16px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+.hy-memory-study thead th { background: var(--sidebar); font-size: 12px; white-space: nowrap; }
+.hy-memory-study tbody th { min-width: 128px; }
+.hy-memory-study tbody tr:last-child>* { border-bottom: 0; }
+.hy-memory-study .hym-highlight { background: color-mix(in srgb,var(--green) 9%,var(--paper)); }
+.hy-memory-study pre { max-width: 100%; overflow-x: auto; padding: 20px; margin: 18px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--sidebar); line-height: 1.8; }
+.hy-memory-study pre code { background: transparent; padding: 0; border-radius: 0; font-size: 12px; white-space: pre; overflow-wrap: normal; }
+.hy-memory-study .hym-details { margin: 18px 0; border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; background: var(--paper); }
+.hy-memory-study .hym-details summary { cursor: pointer; font-weight: 650; }
+.hy-memory-study .hym-details[open] summary { margin-bottom: 16px; }
+.hy-memory-study a { color: var(--green); text-underline-offset: 3px; }
+.hy-memory-study a:focus-visible,.hy-memory-study summary:focus-visible { outline: 2px solid var(--green); outline-offset: 4px; }
+.hy-memory-study .hym-sources p { font-size: 14px; }
+@media (max-width: 760px) {
+  .hy-memory-study .section-head { grid-template-columns: 1fr; gap: 8px; }
+  .hy-memory-study .section-body { margin-left: 0; }
+  .hy-memory-study .hym-flow,.hy-memory-study .hym-grid { grid-template-columns: 1fr; }
+  .hy-memory-study .hym-card { padding: 18px; }
+  .hy-memory-study .hym-table { border-radius: 8px; }
+  .hy-memory-study th,.hy-memory-study td { padding: 11px 12px; }
+}
+</style>
