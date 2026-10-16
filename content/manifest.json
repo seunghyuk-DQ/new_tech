@@ -3,7 +3,7 @@
     {
       "date": "2026-10-16",
       "label": "2026년 10월 16일",
-      "title": "GPT-6 계열 소프트웨어 유지보수",
+      "title": "GPT-6 · Reflection Beam",
       "pages": [
         {
           "id": "gpt6-software-maintenance",
@@ -11,6 +11,13 @@
           "title": "근거를 모아 안전하게 정리하기",
           "subtitle": "dead code · stale experiments · CI",
           "file": "content/2026-10-16/01-gpt6-software-maintenance.html"
+        },
+        {
+          "id": "reflection-beam-available",
+          "index": "02",
+          "title": "Beam 공개와 에이전트 스택",
+          "subtitle": "501B MoE · open weights · Mirror CLI",
+          "file": "content/2026-10-16/02-reflection-beam.html"
         }
       ]
     },

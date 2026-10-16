@@ -1,0 +1,184 @@
+<article class="article beam-study">
+  <header class="article-header" data-index="02">
+    <div class="eyebrow">OPEN WEIGHTS / AGENT INFRASTRUCTURE</div>
+    <h1>Beam 공개: 모델에서 에이전트 스택까지</h1>
+    <p class="dek">Reflection AI는 501B 전체 파라미터, 23B 활성 파라미터의 sparse MoE 모델 Beam을 Apache 2.0 가중치로 공개했다. 발표의 중심은 모델뿐 아니라 추론, 에이전트 실행기, 평가·안전, 맞춤 학습과 배포 경로를 함께 여는 데 있다.</p>
+    <div class="header-meta">
+      <span class="meta-chip">REFLECTION AI</span>
+      <span class="meta-chip">BEAM · SPARSE MoE</span>
+      <span class="meta-chip">원문 2026-10-16 · 정리 2026-10-16</span>
+    </div>
+  </header>
+
+  <section class="section" aria-labelledby="beam-at-a-glance">
+    <div class="beam-metrics" id="beam-at-a-glance">
+      <div class="beam-metric beam-metric-main"><span>MODEL</span><strong>501B</strong><small>전체 파라미터</small></div>
+      <div class="beam-metric"><span>SPARSE MoE</span><strong>23B</strong><small>활성 파라미터</small></div>
+      <div class="beam-metric"><span>WEIGHTS</span><strong>Apache 2.0</strong><small>Hugging Face 공개</small></div>
+      <div class="beam-metric"><span>LAUNCH ECOSYSTEM</span><strong>40+</strong><small>파트너·통합</small></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="beam-stack-title">
+    <div class="section-head">
+      <div class="section-number">01 / OPEN STACK</div>
+      <div>
+        <h2 id="beam-stack-title">Beam을 에이전트 시스템의 중심 모델로 둔다</h2>
+        <p class="section-intro">Reflection은 모델 가중치와 함께 개발자가 선택·교체할 수 있는 추론, harness, 평가, 맞춤화와 배포 경로를 제시한다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <figure class="beam-stack-map" aria-labelledby="beam-stack-caption">
+        <div class="beam-stack-heading"><span>REFLECTION’S “OPEN OPERATING SYSTEM FOR AGENTS”</span><small>개념도 · 실행 로그 아님</small></div>
+        <div class="beam-stack-layers">
+          <div class="beam-layer beam-layer-open"><span class="beam-layer-num">05</span><div><strong>평가 · 안전 · 맞춤화</strong><small>Capability &amp; safety evals · RL · fine-tuning · self-distillation</small></div><b>ADAPT</b></div>
+          <div class="beam-layer beam-layer-open"><span class="beam-layer-num">04</span><div><strong>에이전트 harness</strong><small>Mirror CLI · Pi · OpenCode · Hermes · skills / MCP</small></div><b>ORCHESTRATE</b></div>
+          <div class="beam-layer beam-layer-model"><span class="beam-layer-num">03</span><div><strong>Beam · 모델 kernel</strong><small>Sparse MoE · 501B total / 23B active · coding · reasoning · agentic workloads</small></div><b>MODEL</b></div>
+          <div class="beam-layer beam-layer-inference"><span class="beam-layer-num">02</span><div><strong>추론과 서빙</strong><small>BF16 · FP8 · NVFP4 · drafter · fused kernels · vLLM / SGLang</small></div><b>SERVE</b></div>
+          <div class="beam-layer beam-layer-infra"><span class="beam-layer-num">01</span><div><strong>인프라와 접근 경로</strong><small>Reflection API · managed cloud · self-host · on-prem · sovereign / air-gapped</small></div><b>DEPLOY</b></div>
+        </div>
+        <figcaption id="beam-stack-caption">기사에서 “open operating system for agents”는 개방형 생태계를 설명하는 비유다. 위 계층은 한 제품의 고정된 런타임 구성이 아니라, Beam을 사용할 수 있는 관련 구성 요소를 묶어 보여 준다.</figcaption>
+      </figure>
+      <p>Reflection의 설명에서 모델은 시스템의 한 층이다. 실사용에는 안정적인 추론, 안전 도구, 평가, agent runtime, customization workflow와 배포 선택지가 함께 필요하다. 발표는 이 구성 요소를 오픈소스 프로젝트 및 여러 파트너와 연결하는 데 초점을 둔다.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="beam-serving-title">
+    <div class="section-head">
+      <div class="section-number">02 / INFERENCE</div>
+      <div>
+        <h2 id="beam-serving-title">가중치 형식과 서빙 경로를 함께 공개했다</h2>
+        <p class="section-intro">정밀도 형식은 메모리와 추론 효율을 위한 선택지다. 원문은 형식별 품질·속도 수치를 이 발표 글에서 비교하지 않는다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <figure class="beam-serving-figure" aria-labelledby="beam-formats-title">
+        <figcaption><strong id="beam-formats-title">같은 Beam 가중치, 세 가지 공개 정밀도</strong><span>숫자는 형식명이며 성능 우열 표시가 아니다</span></figcaption>
+        <div class="beam-format-row">
+          <div class="beam-format"><span>01</span><strong>BF16</strong><small>고정밀 가중치</small></div>
+          <div class="beam-format"><span>02</span><strong>FP8</strong><small>저장·서빙 선택지</small></div>
+          <div class="beam-format"><span>03</span><strong>NVFP4</strong><small>NVIDIA FP4 형식</small></div>
+        </div>
+        <div class="beam-serving-addons">
+          <div><span class="addon-icon" aria-hidden="true">↗</span><strong>Speculative decoding</strong><small>별도 drafter 모델 제공</small></div>
+          <div><span class="addon-icon" aria-hidden="true">⌘</span><strong>Serving kernels</strong><small>파트너 최적화 설정과 fused kernels</small></div>
+          <div><span class="addon-icon" aria-hidden="true">⇄</span><strong>Day-zero ecosystem</strong><small>Transformers · vLLM · SGLang · Unsloth · Axolotl · TokenSpeed · Dynamo</small></div>
+        </div>
+      </figure>
+      <p>Reflection은 가중치 형식, speculation drafter, 최적화된 serving 설정을 결합해 메모리 요구량을 낮추고 토큰 생성을 가속하는 것이 목표라고 설명한다. 다만 이 글에는 공통 workload에서의 처리량·지연시간 벤치마크 표가 없으므로, 정량 성능 비교는 모델 카드와 각 serving 구현의 측정 조건을 확인해야 한다.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="beam-mirror-title">
+    <div class="section-head">
+      <div class="section-number">03 / AGENT RUNTIME</div>
+      <div>
+        <h2 id="beam-mirror-title">Mirror CLI는 모델 주변의 작업 흐름을 맡는다</h2>
+        <p class="section-intro">개발자는 실행 상태를 살펴보고 도구 호출을 승인하거나 방향을 조정하며, 필요하면 대화를 이어서 진행한다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <figure class="beam-mirror-diagram" aria-labelledby="beam-mirror-caption">
+        <div class="mirror-flow">
+          <div class="mirror-node mirror-front"><span>PYTHON FRONTEND</span><strong>제품·개발 도구</strong><small>prompt · skills · MCP · Python extensions</small></div>
+          <span class="mirror-arrow" aria-hidden="true">⇄</span>
+          <div class="mirror-node mirror-core"><span>RUST AGENT CORE</span><strong>에이전트 실행 핵심</strong><small>모델 호출 · 도구 실행 · 평가 표면</small></div>
+          <span class="mirror-arrow" aria-hidden="true">→</span>
+          <div class="mirror-node mirror-target"><span>MODEL / ENDPOINT</span><strong>Beam 또는 선택한 대상</strong><small>checkpoint · Reflection API · 외부 endpoint · self-host</small></div>
+        </div>
+        <div class="mirror-controls"><span>실행 중 확인</span><b>활동 inspection</b><b>도구 호출 승인</b><b>방향 조정</b><b>대화 resume</b><b>별도 worktree 병렬 agent</b></div>
+        <figcaption id="beam-mirror-caption">Mirror의 Python frontend가 제품 기능을 제공하고, local connection으로 Rust agent core와 통신한다. 기사 설명 기준의 구조도다.</figcaption>
+      </figure>
+      <p>Mirror는 Reflection 내부 개발에 쓰던 격리 workspace, background session, Slack·Linear·GitHub 연동을 바탕으로 공개 도구로 발전했다. Beam뿐 아니라 다른 checkpoint와 endpoint도 연결할 수 있어 모델과 harness를 분리해서 선택할 수 있다.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="beam-customize-title">
+    <div class="section-head">
+      <div class="section-number">04 / CUSTOMIZE</div>
+      <div>
+        <h2 id="beam-customize-title">평가를 반복하며 도메인에 맞게 조정한다</h2>
+        <p class="section-intro">맞춤화는 한 번의 fine-tuning으로 끝나는 절차가 아니라, 검증된 작업과 평가를 반복하는 과정으로 소개된다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="beam-custom-loop" role="img" aria-label="평가할 과제를 정하고 traces를 생성해 검증한 뒤 LoRA 또는 reinforcement learning으로 학습하고 안전과 능력을 다시 평가하는 반복 과정">
+        <div><span>01</span><strong>과제·평가 준비</strong><small>도메인 작업과 capability·safety 기준</small></div><b aria-hidden="true">→</b>
+        <div><span>02</span><strong>Trace 생성·검증</strong><small>실제 업무에서 쓸 예시와 결과 확인</small></div><b aria-hidden="true">→</b>
+        <div><span>03</span><strong>모델 조정</strong><small>post-training · RL · LoRA</small></div><b aria-hidden="true">→</b>
+        <div><span>04</span><strong>다시 평가</strong><small>성공률·token efficiency·safety</small></div>
+      </div>
+      <div class="beam-scale" aria-label="Reflection이 보고한 Beam reinforcement learning 학습 규모">
+        <div><span>RL + EVAL + ABLATIONS</span><strong>~1.3B</strong><small>사용한 sandbox 수</small></div>
+        <div><span>PEAK FLEET</span><strong>883,006</strong><small>vCPU · allocatable의 83%</small></div>
+        <div><span>CLUSTERS</span><strong>23</strong><small>GCP와 AWS</small></div>
+      </div>
+      <p class="chart-caption">위 숫자는 Reflection이 Beam 최종 RL 학습에서 보고한 내부 운영 규모다. 일반적인 모델 사용에 필요한 자원이나 성능 기준을 뜻하지 않는다. OpenEnv와 파트너의 RL·fine-tuning 도구를 통해 학습 경험을 생태계에 반영하겠다고 밝혔다.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="beam-examples-title">
+    <div class="section-head">
+      <div class="section-number">05 / EARLY USE</div>
+      <div>
+        <h2 id="beam-examples-title">초기 사용자는 코드·도구·환경을 묶어 시험했다</h2>
+        <p class="section-intro">원문은 개발자가 공유한 세 가지 예를 소개한다. 아래 수치는 제작자 데모에서 보고된 값이다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="beam-demo-grid">
+        <article class="beam-demo-card">
+          <span class="demo-tag">TOOLS + PYTHON</span><h3>행성 기계 탈출실</h3>
+          <p>CoreWeave Sandbox에서 규칙과 상태를 도구로 받고 Python을 실행해 빛을 거울에 반사시키며 로봇의 탈출 경로를 푼다.</p>
+          <div class="demo-visual demo-escape" aria-hidden="true"><span>TOOLS</span><i>→</i><span>PYTHON</span><i>→</i><span>3D ROOM</span></div>
+        </article>
+        <article class="beam-demo-card">
+          <span class="demo-tag">SAME TASK · 4 MODELS</span><h3>Voxel 정원 한 페이지 만들기</h3>
+          <p>Beam은 pagoda와 cherry tree, pine 장면을 만들었다. 제작자 기록은 117초, 12.6K tokens, 한 줄 수정 필요다.</p>
+          <div class="demo-number"><strong>117<span>s</span></strong><small>12.6K tokens · one-line fix</small></div>
+        </article>
+        <article class="beam-demo-card">
+          <span class="demo-tag">OPEN CODE · SAME PROMPT</span><h3>모바일 Snake 게임</h3>
+          <p>제작자가 OpenCode에서 같은 prompt로 만든 두 게임의 실행 장면과 빌드 시간을 공유했다.</p>
+          <div class="demo-compare"><div><span>Beam · Catjam</span><strong>2:19.7</strong></div><div><span>Big Pickle</span><strong>4:56.4</strong></div></div>
+        </article>
+      </div>
+      <div class="takeaway warning"><div class="takeaway-mark">!</div><p><strong>해석 경계</strong> 이 영상 사례는 통제된 공통 benchmark가 아니다. prompt 일부가 같은 Snake 데모도 빌드 시간만으로 코드 품질, 문제 해결 능력, 일반적인 속도 차이를 결론 내릴 수 없다.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="beam-access-title">
+    <div class="section-head">
+      <div class="section-number">06 / ACCESS</div>
+      <div>
+        <h2 id="beam-access-title">호스팅 방식과 실행 환경을 선택한다</h2>
+        <p class="section-intro">가중치를 직접 받거나 API를 쓰고, 조직 환경에서는 cloud·on-prem·air-gapped 경로를 고를 수 있다.</p>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="beam-access-map">
+        <div class="access-origin"><span>OPEN WEIGHTS</span><strong>Beam · Apache 2.0</strong><small>Hugging Face에서 내려받아 직접 평가·실행</small></div>
+        <div class="access-branches" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="access-destinations">
+          <div><span>01</span><strong>Reflection API</strong><small>managed endpoint</small></div>
+          <div><span>02</span><strong>Cloud providers</strong><small>AWS · Azure · GCP 등</small></div>
+          <div><span>03</span><strong>Open-source tools</strong><small>Transformers · vLLM · SGLang · Ollama 등</small></div>
+          <div><span>04</span><strong>Behind firewall</strong><small>Dell · HPE · sovereign / air-gapped</small></div>
+        </div>
+      </div>
+      <p>기사는 40개가 넘는 출시 파트너와 통합을 언급한다. 제공 지역·기능·가격은 서비스마다 다를 수 있으므로 실제 사용 전 각 제공자의 문서를 확인해야 한다.</p>
+      <div class="beam-source-block">
+        <h3>출처와 관련 문서</h3>
+        <ol class="source-list">
+          <li><span class="source-index">01</span><a href="https://reflection.ai/blog/beam-is-available" target="_blank" rel="noreferrer">Reflection AI, “Beam is now available”</a><span class="source-type">원문 · 2026-10-16</span></li>
+          <li><span class="source-index">02</span><a href="https://huggingface.co/reflection/" target="_blank" rel="noreferrer">Reflection AI Beam weights</a><span class="source-type">가중치</span></li>
+          <li><span class="source-index">03</span><a href="https://reflection.ai/beam-model-card" target="_blank" rel="noreferrer">Beam model card</a><span class="source-type">벤치마크</span></li>
+          <li><span class="source-index">04</span><a href="https://reflection.ai/beam-safety-report" target="_blank" rel="noreferrer">Beam Safety Technical Report</a><span class="source-type">안전 평가</span></li>
+          <li><span class="source-index">05</span><a href="https://developers.reflection.ai/mirror-overview" target="_blank" rel="noreferrer">Mirror CLI overview</a><span class="source-type">agent harness</span></li>
+          <li><span class="source-index">06</span><a href="https://developers.reflection.ai/quickstart" target="_blank" rel="noreferrer">Reflection API quickstart</a><span class="source-type">API</span></li>
+          <li><span class="source-index">07</span><a href="https://github.com/huggingface/OpenEnv" target="_blank" rel="noreferrer">Hugging Face OpenEnv</a><span class="source-type">환경 표준</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</article>
