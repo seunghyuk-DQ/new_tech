@@ -1,6 +1,20 @@
 {
   "days": [
     {
+      "date": "2026-10-17",
+      "label": "2026년 10월 17일",
+      "title": "장기기억 · Memory Writer",
+      "pages": [
+        {
+          "id": "hy-memory-writer",
+          "index": "01",
+          "title": "Hy-Memory: 기억을 쓰는 모델",
+          "subtitle": "30B-A3B · OPD + Memory RL · 로컬 서빙",
+          "file": "content/2026-10-17/01-hy-memory-writer.html"
+        }
+      ]
+    },
+    {
       "date": "2026-10-16",
       "label": "2026년 10월 16일",
       "title": "GPT-6 · Beam · Agentic E2E",
