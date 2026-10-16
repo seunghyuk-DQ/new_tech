@@ -3,7 +3,7 @@
     {
       "date": "2026-10-16",
       "label": "2026년 10월 16일",
-      "title": "GPT-6 · Reflection Beam",
+      "title": "GPT-6 · Beam · Agentic E2E",
       "pages": [
         {
           "id": "gpt6-software-maintenance",
@@ -18,6 +18,13 @@
           "title": "Beam 공개와 에이전트 스택",
           "subtitle": "501B MoE · open weights · Mirror CLI",
           "file": "content/2026-10-16/02-reflection-beam.html"
+        },
+        {
+          "id": "tester-army-e2e",
+          "index": "03",
+          "title": "AI가 실행하는 Web·Mobile E2E",
+          "subtitle": "agent.act · 검증된 replay · hybrid test",
+          "file": "content/2026-10-16/03-tester-army-e2e.html"
         }
       ]
     },
